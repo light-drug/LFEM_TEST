@@ -25,6 +25,7 @@ Self7 = src/operator
 Self8 = src/problems2D
 
 SelfExample1 = src/example2D
+SelfExample2 = src/example1D
 
 LAPACK_DIR = /export/home/panliang/Package_download/lapack_download/lapack-3.12.0/build
 Eigen_DIR = /export/home/panliang/eigen_download/eigen-3.4.0
@@ -67,8 +68,10 @@ LIB_OBJ_FILES = $(patsubst %.cpp, build/%.o, $(LIB_SRC_FILES))
   # 自动生成对应的 .o 文件列表
 
 # examples（每个cpp一个可执行文件）
-EXAMPLE_SRC_FILES = $(wildcard $(SelfExample1)/*.cpp)
-EXAMPLE_BINS = $(patsubst $(SelfExample1)/%.cpp, bin/%, $(EXAMPLE_SRC_FILES))
+EXAMPLE_SRC_FILES = $(wildcard $(SelfExample1)/*.cpp) \
+                    $(wildcard $(SelfExample2)/*.cpp)
+EXAMPLE_BINS = $(patsubst $(SelfExample1)/%.cpp, bin/%, $(wildcard $(SelfExample1)/*.cpp)) \
+               $(patsubst $(SelfExample2)/%.cpp, bin/%, $(wildcard $(SelfExample2)/*.cpp))
 
 # main 自己的源
 MAIN_SRC = main.cpp
@@ -79,6 +82,10 @@ main: $(MAIN_OBJ) $(LIB_OBJ_FILES)
 	$(CC) $(CCOPT) $(CallCC20) $(MAIN_OBJ) $(LIB_OBJ_FILES) $(INCLUDE_PATH) $(LIB_PATH) -o main
 
 bin/%: build/$(SelfExample1)/%.o $(LIB_OBJ_FILES)
+	@mkdir -p $(dir $@)
+	$(CC) $(CCOPT) $(CallCC20) $< $(LIB_OBJ_FILES) $(INCLUDE_PATH) $(LIB_PATH) -o $@
+
+bin/%: build/$(SelfExample2)/%.o $(LIB_OBJ_FILES)
 	@mkdir -p $(dir $@)
 	$(CC) $(CCOPT) $(CallCC20) $< $(LIB_OBJ_FILES) $(INCLUDE_PATH) $(LIB_PATH) -o $@
 

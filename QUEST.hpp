@@ -38,6 +38,7 @@
 #include "src/problems/KineticDriftDiffusion1D_SL_Newton.hpp"
 #include "src/problems/APDriftDiffusion_SL.hpp"
 #include "src/problems/KineticDriftDiffusion1D_SL_lomac.hpp"
+#include "src/problems/linearadevection_WENO_fd.hpp"
 
 // DG problems
 #include "src/problems/hyperbolicproblemsbase.hpp"
