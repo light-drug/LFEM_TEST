@@ -1,0 +1,12 @@
+# ignore build outputs / runtime outputs
+/build/
+/bin/
+/result/
+/result_DG/
+
+# (可选) 常见杂项
+*.o
+*.a
+*.so
+*.exe
+main

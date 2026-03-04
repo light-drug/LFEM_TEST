@@ -1,0 +1,27 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "/export/home/panliang/LFEM_TEST/src/config",
+                // "${workspaceFolder}/operator_overload",
+                // "${workspaceFolder}/solver",
+                "/export/home/panliang/eigen_download/eigen-3.4.0",
+                "/export/home/panliang/LFEM_TEST/src/general",
+                "/export/home/panliang/LFEM_TEST/src/array"
+            ],
+            "defines": [
+                "_DEBUG",
+                "UNICODE",
+                "_UNICODE"
+            ],
+            "windowsSdkVersion": "10.0.19041.0",
+            "compilerPath": "/usr/bin/g++",
+            "cStandard": "c11",
+            "cppStandard": "c++20", // 在这里指定C++标准
+            "intelliSenseMode": "gcc-x64"
+        }
+    ],
+    "version": 4
+}

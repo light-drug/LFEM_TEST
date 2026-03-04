@@ -1,0 +1,465 @@
+#include "optparser.hpp"
+#include <cctype>
+#include <sstream>
+
+namespace QUEST
+{
+
+using namespace std;
+
+int isValidAsInt(char * s)
+{
+   if ( s == NULL || *s == '\0' )
+   {
+      return 0;   // Empty string
+   }
+
+   if ( *s == '+' || *s == '-' )
+   {
+      ++s;
+   }
+
+   if ( *s == '\0')
+   {
+      return 0;   // sign character only
+   }
+
+   while (*s)
+   {
+      if ( !isdigit(*s) )
+      {
+         return 0;
+      }
+      ++s;
+   }
+
+   return 1;
+}
+
+int isValidAsDouble(char * s)
+{
+   // A valid floating point number for atof using the "C" locale is formed by
+   // - an optional sign character (+ or -),
+   // - followed by a sequence of digits, optionally containing a decimal-point
+   //   character (.),
+   // - optionally followed by an exponent part (an e or E character followed by
+   //   an optional sign and a sequence of digits).
+
+   if ( s == NULL || *s == '\0' )
+   {
+      return 0;   // Empty string
+   }
+
+   if ( *s == '+' || *s == '-' )
+   {
+      ++s;
+   }
+
+   if ( *s == '\0')
+   {
+      return 0;   // sign character only
+   }
+
+   while (*s)
+   {
+      if (!isdigit(*s))
+      {
+         break;
+      }
+      ++s;
+   }
+
+   if (*s == '\0')
+   {
+      return 1;   // s = "123"
+   }
+
+   if (*s == '.')
+   {
+      ++s;
+      while (*s)
+      {
+         if (!isdigit(*s))
+         {
+            break;
+         }
+         ++s;
+      }
+      if (*s == '\0')
+      {
+         return 1;   // this is a fixed point double s = "123." or "123.45"
+      }
+   }
+
+   if (*s == 'e' || *s == 'E')
+   {
+      ++s;
+      return isValidAsInt(s);
+   }
+   else
+   {
+      return 0;   // we have encounter a wrong character
+   }
+}
+
+static bool ParseVectorArg(const char* s, Vector &out)
+{
+   if (s == nullptr || *s == '\0') { return false; }
+
+   std::string str(s);
+
+   // Trim leading/trailing spaces
+   auto ltrim = [](std::string &x)
+   {
+      size_t p = x.find_first_not_of(" \t\n\r");
+      x = (p == std::string::npos) ? std::string() : x.substr(p);
+   };
+   auto rtrim = [](std::string &x)
+   {
+      size_t p = x.find_last_not_of(" \t\n\r");
+      x = (p == std::string::npos) ? std::string() : x.substr(0, p + 1);
+   };
+
+   ltrim(str); rtrim(str);
+   if (str.empty()) { return false; }
+
+   // Optional [ ... ]
+   if (str.front() == '[') { str.erase(str.begin()); }
+   ltrim(str); rtrim(str);
+   if (!str.empty() && str.back() == ']') { str.pop_back(); }
+   ltrim(str); rtrim(str);
+
+   if (str.empty()) { return false; }
+
+   // allow comma/semicolon separated
+   for (char &c : str)
+   {
+      if (c == ',' || c == ';') { c = ' '; }
+   }
+
+   std::stringstream ss(str);
+   std::vector<real_t> vals;
+   real_t x;
+
+   while (true)
+   {
+      // Skip spaces
+      ss >> std::ws;
+      if (ss.eof()) { break; }
+
+      if (!(ss >> x))
+      {
+         return false; // invalid token
+      }
+      vals.push_back(x);
+   }
+
+   if (vals.empty()) { return false; }
+
+   out.resize((int)vals.size());
+   for (int i = 0; i < (int)vals.size(); i++) { out[i] = vals[i]; }
+   return true;
+}
+
+
+void OptionsParser::Parse()
+{
+   option_check.resize(options.size(),0);
+   for (int i = 1; i < argc; )
+   {
+      if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0)
+      {
+         // print help message
+         error_type = 1;
+         return;
+      }
+
+      for (int j = 0; true; j++)
+      {
+         if (j >= options.size())
+         {
+            // unrecognized option
+            error_type = 2;
+            error_idx = i;
+            return;
+         }
+
+         if (strcmp(argv[i], options[j].short_name) == 0 ||
+             strcmp(argv[i], options[j].long_name) == 0)
+         {
+            OptionType type = options[j].type;
+
+            if ( option_check[j] )
+            {
+               error_type = 4;
+               error_idx = j;
+               return;
+            }
+            option_check[j] = 1;
+
+            i++;
+            if (type != ENABLE && type != DISABLE && i >= argc)
+            {
+               // missing argument
+               error_type = 3;
+               error_idx = j;
+               return;
+            }
+
+            int isValid = 1;
+            switch (options[j].type)
+            {
+              case INT:
+                isValid = isValidAsInt(argv[i]);
+                *(int *)(options[j].var_ptr) = atoi(argv[i++]);
+                break;
+              case DOUBLE:
+                isValid = isValidAsDouble(argv[i]);
+                *(real_t *)(options[j].var_ptr) = atof(argv[i++]);
+                break;
+              case STRING:
+                *(const char **)(options[j].var_ptr) = argv[i++];
+                break;
+              case STD_STRING:
+                *(std::string *)(options[j].var_ptr) = argv[i++];
+                break;
+              case VECTOR:
+              {
+                Vector &v = *(Vector *)(options[j].var_ptr);
+                isValid = ParseVectorArg(argv[i], v) ? 1 : 0;
+                i++;
+                break;
+              }
+              case ENABLE:
+                *(bool *)(options[j].var_ptr) = true;
+                option_check[j+1] = 1;  // Do not allow the DISABLE Option
+                break;
+              case DISABLE:
+                *(bool *)(options[j].var_ptr) = false;
+                option_check[j-1] = 1;  // Do not allow the ENABLE Option
+                break;
+            }
+
+            if (!isValid)
+            {
+               error_type = 5;
+               error_idx = i;
+               return;
+            }
+
+            break;
+         }
+      }
+   }
+
+   // check for missing required options
+   for (int i = 0; i < options.size(); i++)
+      if (options[i].required &&
+          (option_check[i] == 0 ||
+           (options[i].type == ENABLE && option_check[++i] == 0)))
+      {
+         error_type = 6; // required option missing
+         error_idx = i; // for a boolean option i is the index of DISABLE
+         return;
+      }
+
+   error_type = 0;
+}
+
+void OptionsParser::ParseCheck(std::ostream &os)
+{
+   Parse();
+   int my_rank = 0;
+   if (!Good())
+   {
+      if (my_rank == 0) { PrintUsage(os); }
+      std::exit(1);
+   }
+   if (my_rank == 0) { PrintOptions(os); }
+}
+
+void OptionsParser::WriteValue(const Option &opt, std::ostream &os)
+{
+   switch (opt.type)
+   {
+      case INT:
+         os << *(int *)(opt.var_ptr);
+         break;
+
+      case DOUBLE:
+         os << *(real_t *)(opt.var_ptr);
+         break;
+
+      case STRING:
+         os << *(const char **)(opt.var_ptr);
+         break;
+
+      case STD_STRING:
+         os << *(std::string *)(opt.var_ptr);
+         break;
+
+      case VECTOR:
+      {
+        const Vector &v = *(const Vector *)(opt.var_ptr);
+        os << "[";
+        for (int i = 0; i < v.size(); i++)
+        {
+          os << v[i];
+          if (i + 1 < v.size()) { os << " "; }
+        }
+        os << "]";
+        break;
+      }
+
+      default: // provide a default to suppress warning
+         break;
+   }
+}
+
+void OptionsParser::PrintOptions(ostream &os) const
+{
+   static const char *indent = "   ";
+
+   os << "Options used:\n";
+   for (int j = 0; j < options.size(); j++)
+   {
+      OptionType type = options[j].type;
+
+      os << indent;
+      if (type == ENABLE)
+      {
+         if (*(bool *)(options[j].var_ptr) == true)
+         {
+            os << options[j].long_name;
+         }
+         else
+         {
+            os << options[j+1].long_name;
+         }
+         j++;
+      }
+      else
+      {
+         os << options[j].long_name << " ";
+         WriteValue(options[j], os);
+      }
+      os << '\n';
+   }
+}
+
+void OptionsParser::PrintError(ostream &os) const
+{
+   static const char *line_sep = "";
+
+   os << line_sep;
+   switch (error_type)
+   {
+      case 2:
+         os << "Unrecognized option: " << argv[error_idx] << '\n' << line_sep;
+         break;
+
+      case 3:
+         os << "Missing argument for the last option: " << argv[argc-1]
+            << '\n' << line_sep;
+         break;
+
+      case 4:
+         if (options[error_idx].type == ENABLE )
+            os << "Option " << options[error_idx].long_name << " or "
+               << options[error_idx + 1].long_name
+               << " provided multiple times\n" << line_sep;
+         else if (options[error_idx].type == DISABLE)
+            os << "Option " << options[error_idx - 1].long_name << " or "
+               << options[error_idx].long_name
+               << " provided multiple times\n" << line_sep;
+         else
+            os << "Option " << options[error_idx].long_name
+               << " provided multiple times\n" << line_sep;
+         break;
+
+      case 5:
+         os << "Wrong option format: " << argv[error_idx - 1] << " "
+            << argv[error_idx] << '\n' << line_sep;
+         break;
+
+      case 6:
+         os << "Missing required option: " << options[error_idx].long_name
+            << '\n' << line_sep;
+         break;
+   }
+   os << endl;
+}
+
+void OptionsParser::PrintHelp(ostream &os) const
+{
+   static const char *indent = "   ";
+   static const char *seprtr = ", ";
+   static const char *descr_sep = "\n\t";
+   static const char *line_sep = "";
+   static const char *types[] = {
+      " <int>",       // INT
+      " <double>",    // DOUBLE
+      " <string>",    // STRING
+      " <string>",    // STD_STRING
+      " '<vector>.'", // VECTOR
+      "",             // ENABLE
+      ""              // DISABLE
+    };
+
+   os << indent << "-h" << seprtr << "--help" << descr_sep
+      << "Print this help message and exit.\n" << line_sep;
+   for (int j = 0; j < options.size(); j++)
+   {
+      OptionType type = options[j].type;
+
+      os << indent << options[j].short_name << types[type]
+         << seprtr << options[j].long_name << types[type]
+         << seprtr;
+      if (options[j].required)
+      {
+         os << "(required)";
+      }
+      else
+      {
+         if (type == ENABLE)
+         {
+            j++;
+            os << options[j].short_name << types[type] << seprtr
+               << options[j].long_name << types[type] << seprtr
+               << "current option: ";
+            if (*(bool *)(options[j].var_ptr) == true)
+            {
+               os << options[j-1].long_name;
+            }
+            else
+            {
+               os << options[j].long_name;
+            }
+         }
+         else
+         {
+            os << "current value: ";
+            WriteValue(options[j], os);
+         }
+      }
+      os << descr_sep;
+
+      if (options[j].description)
+      {
+         os << options[j].description << '\n';
+      }
+      os << line_sep;
+   }
+}
+
+void OptionsParser::PrintUsage(ostream &os) const
+{
+   static const char *line_sep = "";
+
+   PrintError(os);
+   os << "Usage: " << argv[0] << " [options] ...\n" << line_sep
+      << "Options:\n" << line_sep;
+   PrintHelp(os);
+}
+
+}
