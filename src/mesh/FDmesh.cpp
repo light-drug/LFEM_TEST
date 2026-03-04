@@ -48,7 +48,7 @@ const Vector& FDmesh::getX() const
   return X_;
 };
 
-const Vector& getCellCenter() const
+const Vector& FDmesh::getCellCenter_vec() const
 {
   return CellCenter_vec_;
 };

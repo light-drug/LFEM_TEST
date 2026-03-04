@@ -19,6 +19,7 @@ protected:
   const FDmesh* mesh1D_;
   const EX_TVDRK* rk_table_;
   const real_t a_;
+  const real_t x_order_;
   
   real_t pi_;
   real_t CFL_;
@@ -30,7 +31,8 @@ protected:
 public: 
   LinearAdvection_WENO_FD(const FDmesh* mesh1D,
                           const EX_TVDRK* rk_table,
-                          const real_t a);
+                          const real_t a,
+                          const real_t x_order);
   virtual ~LinearAdvection_WENO_FD() = default;
 
   virtual void setCFL(const real_t& cfl);
@@ -49,15 +51,11 @@ public:
 class LinearAdvection_WENO_FD_period
  : public virtual LinearAdvection_WENO_FD
 {
-protected:
-  const FDmesh_period* mesh1D_;
-  const EX_TVDRK* rk_table_;
-  const real_t a_;
-
 public: 
   LinearAdvection_WENO_FD(const FDmesh_period* mesh1D,
                           const EX_TVDRK* rk_table,
-                          const real_t a);
+                          const real_t a,
+                          const real_t x_order);
   virtual ~LinearAdvection_WENO_FD() = default;
 
   void init() override;
