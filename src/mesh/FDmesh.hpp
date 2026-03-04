@@ -28,6 +28,9 @@ public:
   virtual const Vector& getCellCenter_vec() const;
   virtual const Matrix& getCellCenter() const;
 
+  virtual void DisplayResult_withX(const Vector& xtemp,
+                    const Vector& numerical, const Vector& exact,  
+                    const std::string& title, std::ostream& Outfile) const;
   virtual void DisplayResult(const Vector& numerical, const Vector& exact,  
                     const std::string& title, std::ostream& Outfile) const;
   virtual void DisplayResult_ex(const Vector& numerical,  

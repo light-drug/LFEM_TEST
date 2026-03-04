@@ -44,7 +44,7 @@ public:
 
   virtual void init();
   virtual void setdt(real_t* dt) const;
-  virtual void Lu_compute(const Vector& u, const real_t& Trun, Vector* Lu) const;
+  virtual void Lu_compute(const Vector& u, const real_t& Trun, Vector* Lu);
   virtual void updateAll(const real_t& Trun, const real_t& dt);
 
   virtual real_t u_init(const real_t& x) const;

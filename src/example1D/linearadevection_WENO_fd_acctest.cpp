@@ -41,7 +41,8 @@ int main(int argc, char *argv[])
   IntVector xDiv_vec(m);
   Vector uL1(m), uL2(m), uLinf(m);
 
-  for (int i = 0; i < m; ++i) {
+  for (int i = 0; i < m; ++i) 
+  {
     xDiv_vec(i) = std::pow(2, i) * xDiv;
 
     QUEST::EX_TVDRK rk_table(t_order);
@@ -59,7 +60,8 @@ int main(int argc, char *argv[])
 
       real_t Trun = 0.e0;
       real_t dt = 0.e0;
-      while (Trun < Tstop) {
+      while (Trun < Tstop) 
+      {
         solver.setdt(&dt);
         if (Trun + dt > Tstop) {
           dt = Tstop - Trun;
@@ -79,9 +81,10 @@ int main(int argc, char *argv[])
         std::string filename = "WENO_period_X" + std::to_string(mesh1D.getxDiv()) +
                                "_o" + std::to_string(x_order) + ".dat";
         std::ofstream outFile(output_dir + "/" + filename);
-        mesh1D.DisplayResult(u_num, u_ex, title, outFile);
+        mesh1D.DisplayResult_withX(xc, u_num, u_ex, title, outFile);
       }
-    } else {
+    } else 
+    {
       QUEST::FDmesh mesh1D(x1, x2, xDiv_vec(i));
       mesh1D.init();
       QUEST::LinearAdvection_WENO_FD solver(&mesh1D, &rk_table, a, x_order);
@@ -110,7 +113,7 @@ int main(int argc, char *argv[])
         std::string filename = "WENO_outflow_X" + std::to_string(mesh1D.getxDiv()) +
                                "_o" + std::to_string(x_order) + ".dat";
         std::ofstream outFile(output_dir + "/" + filename);
-        mesh1D.DisplayResult(u_num, u_ex, title, outFile);
+        mesh1D.DisplayResult_withX(xc, u_num, u_ex, title, outFile);
       }
     }
   }

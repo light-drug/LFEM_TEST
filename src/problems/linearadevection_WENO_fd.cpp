@@ -56,7 +56,7 @@ real_t LinearAdvection_WENO_FD::right_ghost_value(const Vector& u, const int gho
   return u(N - 1 - ghost_id);
 }
 
-Vector LinearAdvection_WENO_FD::extend_with_ghost(const Vector& u, const real_t Trun) const
+Vector LinearAdvection_WENO_FD::extend_with_ghost(const Vector& u, const real_t& Trun) const
 {
   const int ng = 3;
   const int N = static_cast<int>(u.size());
@@ -121,7 +121,7 @@ real_t LinearAdvection_WENO_FD::weno5_left_biased(const Vector& ue, const int if
   return (a0 * p0 + a1 * p1 + a2 * p2) / asum;
 }
 
-void LinearAdvection_WENO_FD::Lu_compute(const Vector& u, const real_t& Trun, Vector* Lu) const
+void LinearAdvection_WENO_FD::Lu_compute(const Vector& u, const real_t& Trun, Vector* Lu)
 {
   const int N = static_cast<int>(u.size());
   const real_t hx = mesh1D_->gethx();

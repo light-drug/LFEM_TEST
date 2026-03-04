@@ -24,8 +24,8 @@ Self6 = src/problems
 Self7 = src/operator
 Self8 = src/problems2D
 
-SelfExample1 = src/example2D
-SelfExample2 = src/example1D
+SelfExample1 = src/example1D
+SelfExample2 = src/example2D
 
 LAPACK_DIR = /export/home/panliang/Package_download/lapack_download/lapack-3.12.0/build
 Eigen_DIR = /export/home/panliang/eigen_download/eigen-3.4.0

@@ -84,6 +84,27 @@ void FDmesh::generateCellCenter()
   CellCenter_vec_ = CellCenter_.row(0).transpose();
 };
 
+void FDmesh::DisplayResult_withX(const Vector& xtemp,
+    const Vector& numerical, const Vector& exact,  
+    const std::string& title, std::ostream& Outfile) const 
+{
+  QUEST_VERIFY(numerical.size() == exact.size(), 
+              " numerical and exact must have the same mesh size !");
+  QUEST_VERIFY(numerical.size() == xtemp.size(), 
+              " x and numerical must have the same mesh size !");
+  Outfile <<  "TITLE = \" "<< title << " \" " << std::endl;
+  Outfile <<  "VARIABLES = \"X\", \"Numerical Solution\", \"Exact Solution\"" << std::endl;
+  Outfile <<  "ZONE T = \"Solution Zone\", I = " << Nx_ << " F = POINT" << std::endl;
+  Outfile << std::fixed << std::setprecision(16);
+  for (int i = 0; i < xtemp.size(); i++) {
+    real_t x0 = xtemp(i);
+    Outfile << x0 << " " 
+            << numerical(i) << " "
+            << exact(i) << " " << std::endl;
+  };
+};
+
+
 void FDmesh::DisplayResult(const Vector& numerical, const Vector& exact,  
     const std::string& title, std::ostream& Outfile) const 
 {
