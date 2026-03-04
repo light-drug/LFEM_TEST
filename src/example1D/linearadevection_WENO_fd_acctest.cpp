@@ -47,6 +47,8 @@ int main(int argc, char *argv[])
 
     QUEST::EX_TVDRK rk_table(t_order);
     rk_table.init();
+    // rk_table.printall();
+    // PAUSE();
 
     Vector u_num;
     Vector u_ex;
@@ -79,7 +81,8 @@ int main(int argc, char *argv[])
 
       if (plot > 0) {
         std::string filename = "WENO_period_X" + std::to_string(mesh1D.getxDiv()) +
-                               "_o" + std::to_string(x_order) + ".dat";
+                               "_ox" + std::to_string(x_order) + 
+                               "_ot" + std::to_string(t_order) + ".dat";
         std::ofstream outFile(output_dir + "/" + filename);
         mesh1D.DisplayResult_withX(xc, u_num, u_ex, title, outFile);
       }
@@ -111,7 +114,8 @@ int main(int argc, char *argv[])
 
       if (plot > 0) {
         std::string filename = "WENO_outflow_X" + std::to_string(mesh1D.getxDiv()) +
-                               "_o" + std::to_string(x_order) + ".dat";
+                               "_ox" + std::to_string(x_order) + 
+                               "_ot" + std::to_string(t_order) + ".dat";
         std::ofstream outFile(output_dir + "/" + filename);
         mesh1D.DisplayResult_withX(xc, u_num, u_ex, title, outFile);
       }

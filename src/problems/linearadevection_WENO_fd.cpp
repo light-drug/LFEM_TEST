@@ -41,7 +41,9 @@ void LinearAdvection_WENO_FD::init()
 
 void LinearAdvection_WENO_FD::setdt(real_t* dt) const
 {
+  const int& t_order = rk_table_->gett_order();
   *dt = CFL_ * mesh1D_->gethx() / std::abs(a_);
+  *dt = std::pow(*dt, real_t(x_order_) / real_t(t_order));
 }
 
 real_t LinearAdvection_WENO_FD::left_ghost_value(const int ghost_id, const real_t& Trun) const
@@ -75,19 +77,20 @@ real_t LinearAdvection_WENO_FD::weno3_left_biased(const Vector& ue, const int if
   const real_t u0 = ue(iface);
   const real_t u1 = ue(iface + 1);
 
-  const real_t p0 = 0.5e0 * (-um1 + 3.e0 * u0);
+  const real_t p0 = 0.5e0 * (- um1 + 3.e0 * u0);
   const real_t p1 = 0.5e0 * (u0 + u1);
-  const real_t b0 = (u0 - um1) * (u0 - um1);
-  const real_t b1 = (u1 - u0) * (u1 - u0);
+
+  const real_t beta0 = (u0 - um1) * (u0 - um1);
+  const real_t beta1 = (u1 - u0) * (u1 - u0);
 
   const real_t d0 = 1.e0 / 3.e0;
   const real_t d1 = 2.e0 / 3.e0;
+  return d0 * p0 + d1 * p1;
+  // const real_t a0 = d0 / ((kWenoEps + beta0) * (kWenoEps + beta0));
+  // const real_t a1 = d1 / ((kWenoEps + beta1) * (kWenoEps + beta1));
+  // const real_t asum = a0 + a1;
 
-  const real_t a0 = d0 / ((kWenoEps + b0) * (kWenoEps + b0));
-  const real_t a1 = d1 / ((kWenoEps + b1) * (kWenoEps + b1));
-  const real_t asum = a0 + a1;
-
-  return (a0 * p0 + a1 * p1) / asum;
+  // return (a0 * p0 + a1 * p1) / asum;
 }
 
 real_t LinearAdvection_WENO_FD::weno5_left_biased(const Vector& ue, const int iface) const
@@ -102,20 +105,20 @@ real_t LinearAdvection_WENO_FD::weno5_left_biased(const Vector& ue, const int if
   const real_t p1 = (-um1 + 5.e0 * u0 + 2.e0 * u1) / 6.e0;
   const real_t p2 = (2.e0 * u0 + 5.e0 * u1 - u2) / 6.e0;
 
-  const real_t b0 = (13.e0 / 12.e0) * std::pow(um2 - 2.e0 * um1 + u0, 2) +
+  const real_t beta0 = (13.e0 / 12.e0) * std::pow(um2 - 2.e0 * um1 + u0, 2) +
                     0.25e0 * std::pow(um2 - 4.e0 * um1 + 3.e0 * u0, 2);
-  const real_t b1 = (13.e0 / 12.e0) * std::pow(um1 - 2.e0 * u0 + u1, 2) +
+  const real_t beta1 = (13.e0 / 12.e0) * std::pow(um1 - 2.e0 * u0 + u1, 2) +
                     0.25e0 * std::pow(um1 - u1, 2);
-  const real_t b2 = (13.e0 / 12.e0) * std::pow(u0 - 2.e0 * u1 + u2, 2) +
+  const real_t beta2 = (13.e0 / 12.e0) * std::pow(u0 - 2.e0 * u1 + u2, 2) +
                     0.25e0 * std::pow(3.e0 * u0 - 4.e0 * u1 + u2, 2);
 
   const real_t d0 = 0.1e0;
   const real_t d1 = 0.6e0;
   const real_t d2 = 0.3e0;
 
-  const real_t a0 = d0 / ((kWenoEps + b0) * (kWenoEps + b0));
-  const real_t a1 = d1 / ((kWenoEps + b1) * (kWenoEps + b1));
-  const real_t a2 = d2 / ((kWenoEps + b2) * (kWenoEps + b2));
+  const real_t a0 = d0 / ((kWenoEps + beta0) * (kWenoEps + beta0));
+  const real_t a1 = d1 / ((kWenoEps + beta1) * (kWenoEps + beta1));
+  const real_t a2 = d2 / ((kWenoEps + beta2) * (kWenoEps + beta2));
   const real_t asum = a0 + a1 + a2;
 
   return (a0 * p0 + a1 * p1 + a2 * p2) / asum;
@@ -135,29 +138,31 @@ void LinearAdvection_WENO_FD::Lu_compute(const Vector& u, const real_t& Trun, Ve
   }
 
   Lu->resize(N);
-  Lu->array() = -(flux.tail(N).array() - flux.head(N).array()) / hx;
+  Lu->array() = - (flux.tail(N).array() - flux.head(N).array()) / hx;
 }
 
 void LinearAdvection_WENO_FD::updateAll(const real_t& Trun, const real_t& dt)
 {
-  const Matrix A = rk_table_->getA();
-  const Matrix Be = rk_table_->getBe();
-  const Vector c = rk_table_->getc();
-  const int stages = rk_table_->getstages();
+  const Matrix& A = rk_table_->getA();
+  const Matrix& Be = rk_table_->getBe();
+  const Vector& c = rk_table_->getc();
+  const int& stages = rk_table_->getstages();
+  const int& Nx = mesh1D_->getxDiv();
 
-  u_stages_[0] = u_;
-  for (int s = 1; s < stages; ++s) {
-    Vector u_stage = A(s, 0) * u_stages_[0];
+  Vector zeros = Vector::Zero(Nx);
+  for (int s = 0; s < stages; ++s) {
+    u_stages_[s] = zeros;
     for (int j = 0; j < s; ++j) {
-      Lu_compute(u_stages_[j], Trun + c(j) * dt, &Lu_stages_[j]);
-      u_stage.noalias() += dt * Be(s, j) * Lu_stages_[j];
-      if (j > 0) {
-        u_stage.noalias() += A(s, j) * u_stages_[j];
-      }
+      u_stages_[s] += A(s, j) * u_stages_[j] + dt * Be(s, j) * Lu_stages_[j];
     }
-    u_stages_[s] = u_stage;
+    if (s == 0)
+    {
+      u_stages_[s] = u_;
+    };
+    if (s == stages - 1) break;
+    Lu_compute(u_stages_[s], Trun + c(s) * dt, &Lu_stages_[s]);
   }
-  u_ = u_stages_.back();
+  u_ = u_stages_[stages - 1];
 }
 
 real_t LinearAdvection_WENO_FD::u_init(const real_t& x) const
