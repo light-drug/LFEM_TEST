@@ -85,12 +85,12 @@ real_t LinearAdvection_WENO_FD::weno3_left_biased(const Vector& ue, const int if
 
   const real_t d0 = 1.e0 / 3.e0;
   const real_t d1 = 2.e0 / 3.e0;
-  return d0 * p0 + d1 * p1;
-  // const real_t a0 = d0 / ((kWenoEps + beta0) * (kWenoEps + beta0));
-  // const real_t a1 = d1 / ((kWenoEps + beta1) * (kWenoEps + beta1));
-  // const real_t asum = a0 + a1;
+  // return d0 * p0 + d1 * p1;
+  const real_t a0 = d0 / ((kWenoEps + beta0) * (kWenoEps + beta0));
+  const real_t a1 = d1 / ((kWenoEps + beta1) * (kWenoEps + beta1));
+  const real_t asum = a0 + a1;
 
-  // return (a0 * p0 + a1 * p1) / asum;
+  return (a0 * p0 + a1 * p1) / asum;
 }
 
 real_t LinearAdvection_WENO_FD::weno5_left_biased(const Vector& ue, const int iface) const
