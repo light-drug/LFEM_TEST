@@ -23,6 +23,7 @@ int main(int argc, char *argv[])
   int m = 4;
   int period = 0;
   int plot = 0;
+  int outputgap = 0;
 
   QUEST::OptionsParser args(argc, argv);
   args.AddOption(&x1, "-x1", "--x1", "Left boundary of x.");
@@ -36,6 +37,7 @@ int main(int argc, char *argv[])
   args.AddOption(&m, "-m", "--max", "Number of mesh refinements.");
   args.AddOption(&period, "-period", "--period", "Use periodic BC or not.");
   args.AddOption(&plot, "-plot", "--if_plot", "Output pointwise result if >0.");
+  args.AddOption(&outputgap, "-output", "--outputgap", "Output every outputgap time steps if >0.");
   args.ParseCheck(std::cout);
 
   IntVector xDiv_vec(m);
@@ -62,6 +64,7 @@ int main(int argc, char *argv[])
 
       real_t Trun = 0.e0;
       real_t dt = 0.e0;
+      int step_count = 0;
       while (Trun < Tstop) 
       {
         solver.setdt(&dt);
@@ -70,6 +73,11 @@ int main(int argc, char *argv[])
         }
         solver.updateAll(Trun, dt);
         Trun += dt;
+        ++step_count;
+        if (outputgap > 0 && step_count % outputgap == 0)
+        {
+          std::cout << "Trun = " << Trun << ", dt = " << dt << std::endl;
+        }
       }
       const Vector& xc = mesh1D.getCellCenter_vec();
       u_num = solver.getu();
@@ -96,6 +104,7 @@ int main(int argc, char *argv[])
 
       real_t Trun = 0.e0;
       real_t dt = 0.e0;
+      int step_count = 0;
       while (Trun < Tstop) {
         solver.setdt(&dt);
         if (Trun + dt > Tstop) {
@@ -103,6 +112,11 @@ int main(int argc, char *argv[])
         }
         solver.updateAll(Trun, dt);
         Trun += dt;
+        ++step_count;
+        if (outputgap > 0 && step_count % outputgap == 0)
+        {
+          std::cout << "Trun = " << Trun << ", dt = " << dt << std::endl;
+        }
       }
       const Vector& xc = mesh1D.getCellCenter_vec();
       u_num = solver.getu();

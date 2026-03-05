@@ -31,6 +31,7 @@
 
 // prblems
 #include "src/problems/Euler1D_acctest.hpp"
+#include "src/problems/Euler1D_WENO_fd.hpp"
 #include "src/problems/Poissonsolver1DFD.hpp"
 #include "src/problems/DriftDiffusion1D_FD.hpp"
 #include "src/problems/KineticDriftDiffusion1D_SL.hpp"

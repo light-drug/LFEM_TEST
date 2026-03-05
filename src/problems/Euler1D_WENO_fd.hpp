@@ -15,32 +15,40 @@ class Euler1D_WENO_FD
 protected:
   const FDmesh* mesh1D_;
   const EX_TVDRK* rk_table_;
-  real_t a_;
+  real_t gamma_;
   int x_order_;
 
   real_t pi_;
   real_t CFL_;
 
-  std::vector<Vector> u_; // rho, rhovx, E 守恒变量
+  std::vector<Vector> u_; // rho, rhovx, E
   std::vector<std::vector<Vector>> u_stages_;
   std::vector<std::vector<Vector>> Lu_stages_;
 
   virtual std::vector<Vector> extend_with_ghost(const std::vector<Vector>& u, const real_t& Trun) const;
   virtual void extend_left_ghost(const int ghost_id, const real_t& Trun,
-                                std::vector<Vector>* u) const;
+                                 std::vector<Vector>* ue) const;
   virtual void extend_right_ghost(const int ghost_id, const real_t& Trun,
-                                  std::vector<Vector>* u) const;
+                                  std::vector<Vector>* ue) const;
 
   virtual real_t weno3_left_biased(const Vector& ue, const int iface) const;
   virtual real_t weno5_left_biased(const Vector& ue, const int iface) const;
+  virtual real_t weno3_right_biased(const Vector& ue, const int iface) const;
+  virtual real_t weno5_right_biased(const Vector& ue, const int iface) const;
+
+  virtual Vector flux_eval(const Vector& u) const;
+  virtual void eigensystem_from_state(const Vector& u,
+                                      Matrix* R,
+                                      Matrix* L,
+                                      real_t* max_lambda) const;
 
 public:
   Euler1D_WENO_FD(const FDmesh* mesh1D,
                   const EX_TVDRK* rk_table,
-                  const real_t a,
                   const int x_order);
   virtual ~Euler1D_WENO_FD() = default;
 
+  virtual void setgamma(const real_t& gamma);
   virtual void setCFL(const real_t& cfl);
   virtual const std::vector<Vector>& getu() const;
   virtual const Vector& getrho() const;
@@ -50,7 +58,7 @@ public:
 
   virtual void init();
   virtual void setdt(real_t* dt) const;
-  virtual void Lu_compute(const std::vector<Vector>& u, const real_t& Trun, 
+  virtual void Lu_compute(const std::vector<Vector>& u, const real_t& Trun,
                           std::vector<Vector>* Lu);
   virtual void updateAll(const real_t& Trun, const real_t& dt);
 
@@ -75,18 +83,17 @@ class Euler1D_WENO_FD_period : public Euler1D_WENO_FD
 protected:
   const FDmesh_period* mesh1D_period_;
 
-  std::vector<Vector> extend_with_ghost(const std::vector<Vector>& u, 
+  std::vector<Vector> extend_with_ghost(const std::vector<Vector>& u,
                                         const real_t& Trun) const override;
-  real_t left_ghost_value(const int ghost_id, const real_t& Trun,
-                          std::vector<Vector>* u) const override;
-  real_t right_ghost_value(const int ghost_id, const real_t& Trun,
-                            std::vector<Vector>* u) const override;
+  void extend_left_ghost(const int ghost_id, const real_t& Trun,
+                         std::vector<Vector>* ue) const override;
+  void extend_right_ghost(const int ghost_id, const real_t& Trun,
+                          std::vector<Vector>* ue) const override;
 
 public:
   Euler1D_WENO_FD_period(const FDmesh_period* mesh1D,
-                          const EX_TVDRK* rk_table,
-                          const real_t a,
-                          const int x_order);
+                         const EX_TVDRK* rk_table,
+                         const int x_order);
   ~Euler1D_WENO_FD_period() override = default;
 
   real_t rho_init(const real_t& x) const override;
