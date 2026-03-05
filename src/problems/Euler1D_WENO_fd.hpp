@@ -27,7 +27,7 @@ protected:
 
   virtual std::vector<Vector> extend_with_ghost(const std::vector<Vector>& u, const real_t& Trun) const;
   virtual void extend_left_ghost(const int ghost_id, const real_t& Trun,
-                                std::vector<Vector>* u);
+                                std::vector<Vector>* u) const;
   virtual void extend_right_ghost(const int ghost_id, const real_t& Trun,
                                   std::vector<Vector>* u) const;
 
