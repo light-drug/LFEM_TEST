@@ -20,23 +20,25 @@ protected:
 
   real_t pi_;
   real_t CFL_;
+  int num_equations_;
 
   std::vector<Vector> u_; // rho, rhovx, E
   std::vector<std::vector<Vector>> u_stages_;
   std::vector<std::vector<Vector>> Lu_stages_;
 
   virtual std::vector<Vector> extend_with_ghost(const std::vector<Vector>& u, const real_t& Trun) const;
-  virtual void extend_left_ghost(const int ghost_id, const real_t& Trun,
+  virtual void extend_left_ghost(const int ghost_id, const real_t Trun,
                                  std::vector<Vector>* ue) const;
-  virtual void extend_right_ghost(const int ghost_id, const real_t& Trun,
+  virtual void extend_right_ghost(const int ghost_id, const real_t Trun,
                                   std::vector<Vector>* ue) const;
 
-  virtual real_t weno3_left_biased(const Vector& ue, const int iface) const;
-  virtual real_t weno5_left_biased(const Vector& ue, const int iface) const;
-  virtual real_t weno3_right_biased(const Vector& ue, const int iface) const;
-  virtual real_t weno5_right_biased(const Vector& ue, const int iface) const;
+  virtual Vector weno3_left_biased(const std::vector<Vector>& unei) const;
+  virtual Vector weno5_left_biased(const std::vector<Vector>& unei) const;
+  virtual Vector weno3_right_biased(const std::vector<Vector>& unei) const;
+  virtual Vector weno5_right_biased(const std::vector<Vector>& unei) const;
 
   virtual Vector flux_eval(const Vector& u) const;
+  virtual std::vector<Vector> flux_eval(const std::vector<Vector>& u) const;
   virtual void eigensystem_from_state(const Vector& u,
                                       Matrix* R,
                                       Matrix* L,
@@ -58,6 +60,7 @@ public:
 
   virtual void init();
   virtual void setdt(real_t* dt) const;
+  virtual real_t max_wave_speed(const std::vector<Vector>& u) const;
   virtual void Lu_compute(const std::vector<Vector>& u, const real_t& Trun,
                           std::vector<Vector>* Lu);
   virtual void updateAll(const real_t& Trun, const real_t& dt);
@@ -65,17 +68,14 @@ public:
   virtual real_t rho_init(const real_t& x) const;
   virtual Vector rho_init(const Vector& x) const;
   virtual real_t rho_bc(const real_t& x, const real_t& t) const;
-  virtual Vector rho_bc(const Vector& x, const real_t& t) const;
 
   virtual real_t vx_init(const real_t& x) const;
   virtual Vector vx_init(const Vector& x) const;
   virtual real_t vx_bc(const real_t& x, const real_t& t) const;
-  virtual Vector vx_bc(const Vector& x, const real_t& t) const;
 
   virtual real_t pre_init(const real_t& x) const;
   virtual Vector pre_init(const Vector& x) const;
   virtual real_t pre_bc(const real_t& x, const real_t& t) const;
-  virtual Vector pre_bc(const Vector& x, const real_t& t) const;
 };
 
 class Euler1D_WENO_FD_period : public Euler1D_WENO_FD
@@ -85,9 +85,9 @@ protected:
 
   std::vector<Vector> extend_with_ghost(const std::vector<Vector>& u,
                                         const real_t& Trun) const override;
-  void extend_left_ghost(const int ghost_id, const real_t& Trun,
+  void extend_left_ghost(const int ghost_id, const real_t Trun,
                          std::vector<Vector>* ue) const override;
-  void extend_right_ghost(const int ghost_id, const real_t& Trun,
+  void extend_right_ghost(const int ghost_id, const real_t Trun,
                           std::vector<Vector>* ue) const override;
 
 public:
@@ -99,17 +99,20 @@ public:
   real_t rho_init(const real_t& x) const override;
   Vector rho_init(const Vector& x) const override;
   real_t rho_bc(const real_t& x, const real_t& t) const override;
-  Vector rho_bc(const Vector& x, const real_t& t) const override;
+  virtual real_t rho_real(const real_t& x, const real_t& t) const;
+  virtual Vector rho_real(const Vector& x, const real_t& t) const;
 
   real_t vx_init(const real_t& x) const override;
   Vector vx_init(const Vector& x) const override;
   real_t vx_bc(const real_t& x, const real_t& t) const override;
-  Vector vx_bc(const Vector& x, const real_t& t) const override;
+  virtual real_t vx_real(const real_t& x, const real_t& t) const;
+  virtual Vector vx_real(const Vector& x, const real_t& t) const;
 
   real_t pre_init(const real_t& x) const override;
   Vector pre_init(const Vector& x) const override;
   real_t pre_bc(const real_t& x, const real_t& t) const override;
-  Vector pre_bc(const Vector& x, const real_t& t) const override;
+  virtual real_t pre_real(const real_t& x, const real_t& t) const;
+  virtual Vector pre_real(const Vector& x, const real_t& t) const;
 };
 
 } // namespace QUEST

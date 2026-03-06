@@ -1,38 +1,16 @@
 #include "QUEST.hpp"
-#include "Euler1D_WENO_fd.hpp"
 
 #include <cmath>
 
-class EulerPeriodicExact final : public QUEST::Euler1D_WENO_FD_period
-{
-public:
-  using QUEST::Euler1D_WENO_FD_period::Euler1D_WENO_FD_period;
-
-  Vector rho_exact(const Vector& x, const real_t& t) const
-  {
-    const real_t x1 = mesh1D_period_->getx1();
-    const real_t x2 = mesh1D_period_->getx2();
-    const real_t L = x2 - x1;
-    Vector y = x.array() - t;
-    y = (y.array() - x1 - ((y.array() - x1) / L).floor() * L + x1).matrix();
-    return rho_init(y);
-  }
-
-  Vector vx_exact(const Vector& x, const real_t&) const
-  {
-    return Vector::Ones(x.size());
-  }
-
-  Vector pre_exact(const Vector& x, const real_t&) const
-  {
-    return Vector::Ones(x.size());
-  }
-};
+/*
+  ./bin/Euler1D_WENO_fd_period_acctest -m 4 -nx 40 -ox 5 -ot 3 -Tstop 0.2
+*/
 
 int main(int argc, char* argv[])
 {
+  real_t pi = 3.141592653589793238462643383279;
   real_t x1 = 0.e0;
-  real_t x2 = 1.e0;
+  real_t x2 = 2.e0 * pi;
   int xDiv = 40;
   int x_order = 5;
   int t_order = 3;
@@ -66,15 +44,17 @@ int main(int argc, char* argv[])
     QUEST::EX_TVDRK rk_table(t_order);
     rk_table.init();
 
-    EulerPeriodicExact solver(&mesh1D, &rk_table, x_order);
+    QUEST::Euler1D_WENO_FD_period solver(&mesh1D, &rk_table, x_order);
     solver.setgamma(gamma);
     solver.setCFL(cfl);
     solver.init();
 
+    TIC;
     real_t Trun = 0.e0;
     real_t dt = 0.e0;
     int step_count = 0;
-    while (Trun < Tstop) {
+    while (Trun < Tstop) 
+    {
       solver.setdt(&dt);
       if (Trun + dt > Tstop) {
         dt = Tstop - Trun;
@@ -88,9 +68,12 @@ int main(int argc, char* argv[])
         std::cout << "Trun = " << Trun << ", dt = " << dt << std::endl;
       }
     }
-
+    std::cout << " Tstop = " << Tstop 
+              << " for the mesh Nx = " << mesh1D.getxDiv() << std::endl;
+    TOC;
+    
     const Vector& xc = mesh1D.getCellCenter_vec();
-    Vector rho_ex = solver.rho_exact(xc, Tstop);
+    Vector rho_ex = solver.rho_real(xc, Tstop);
     mesh1D.computerrorL1(solver.getrho(), rho_ex, &rhoL1(i));
     mesh1D.computerrorL2(solver.getrho(), rho_ex, &rhoL2(i));
     mesh1D.computerrorLinf(solver.getrho(), rho_ex, &rhoLinf(i));

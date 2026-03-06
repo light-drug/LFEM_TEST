@@ -78,7 +78,7 @@ void FDmesh::generatexpoints() {
 void FDmesh::generateCellCenter() 
 {
   CellCenter_.resize(1, xDiv_);
-  for (int i = 0; i < Nx_; ++i) {
+  for (int i = 0; i < xDiv_; ++i) {
     CellCenter_(0, i) = (real_t(i) + 0.5e0) * hx_ + x1_;
   }
   CellCenter_vec_ = CellCenter_.row(0).transpose();

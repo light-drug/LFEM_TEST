@@ -47,7 +47,9 @@ Vector Euler1D_WENO_FD::getpre(const std::vector<Vector>& u) const
 void Euler1D_WENO_FD::init()
 {
   const Vector& xc = mesh1D_->getCellCenter_vec();
-  u_.resize(3);
+
+  num_equations_ = 3;
+  u_.resize(num_equations_);
   u_[0] = rho_init(xc);
   const Vector vx = vx_init(xc);
   const Vector pre = pre_init(xc);
@@ -55,18 +57,29 @@ void Euler1D_WENO_FD::init()
   u_[2] = (pre.array() / (gamma_ - 1.e0) + 0.5e0 * u_[0].array() * vx.array().square()).matrix();
 
   const int stages = rk_table_->getstages();
-  u_stages_.assign(stages, std::vector<Vector>(3, Vector::Zero(u_[0].size())));
-  Lu_stages_.assign(stages, std::vector<Vector>(3, Vector::Zero(u_[0].size())));
+  u_stages_.assign(stages, std::vector<Vector>(num_equations_, Vector::Zero(u_[0].size())));
+  Lu_stages_.assign(stages, std::vector<Vector>(num_equations_, Vector::Zero(u_[0].size())));
 }
 
 void Euler1D_WENO_FD::setdt(real_t* dt) const
 {
+  const int& t_order = rk_table_->gett_order();
   const Vector vx = u_[1].array() / u_[0].array();
   const Vector pre = getpre(u_);
   const Vector cs = (gamma_ * pre.array() / u_[0].array()).sqrt();
   const real_t max_speed = (vx.array().abs() + cs.array()).maxCoeff();
   *dt = CFL_ * mesh1D_->gethx() / max_speed;
+  *dt = std::pow(*dt, real_t(x_order_) / real_t(t_order));
 }
+
+real_t Euler1D_WENO_FD::max_wave_speed(const std::vector<Vector>& u) const
+{
+  const Vector vx = u_[1].array() / u_[0].array();
+  const Vector pre = getpre(u_);
+  const Vector cs = (gamma_ * pre.array() / u_[0].array()).sqrt();
+  const real_t max_speed = (vx.array().abs() + cs.array()).maxCoeff();
+  return max_speed;
+};
 
 void Euler1D_WENO_FD::extend_left_ghost(const int ghost_id, const real_t Trun,
                                         std::vector<Vector>* ue) const
@@ -81,14 +94,18 @@ void Euler1D_WENO_FD::extend_left_ghost(const int ghost_id, const real_t Trun,
   ue->at(2)(idx) = pre / (gamma_ - 1.e0) + 0.5e0 * rho * vx * vx;
 }
 
-void Euler1D_WENO_FD::extend_right_ghost(const int ghost_id, const real_t,
+void Euler1D_WENO_FD::extend_right_ghost(const int ghost_id, const real_t Trun,
                                          std::vector<Vector>* ue) const
 {
   const int N = static_cast<int>(u_[0].size());
+  const real_t xg = mesh1D_->getx2() + (real_t(ghost_id) + 0.5e0) * mesh1D_->gethx();
   const int idx = 3 + N + ghost_id;
-  ue->at(0)(idx) = u_[0](N - 1 - ghost_id);
-  ue->at(1)(idx) = u_[1](N - 1 - ghost_id);
-  ue->at(2)(idx) = u_[2](N - 1 - ghost_id);
+  const real_t rho = rho_bc(xg, Trun);
+  const real_t vx = vx_bc(xg, Trun);
+  const real_t pre = pre_bc(xg, Trun);
+  ue->at(0)(idx) = rho;
+  ue->at(1)(idx) = rho * vx;
+  ue->at(2)(idx) = pre / (gamma_ - 1.e0) + 0.5e0 * rho * vx * vx;
 }
 
 std::vector<Vector> Euler1D_WENO_FD::extend_with_ghost(const std::vector<Vector>& u, const real_t& Trun) const
@@ -96,102 +113,171 @@ std::vector<Vector> Euler1D_WENO_FD::extend_with_ghost(const std::vector<Vector>
   const int ng = 3;
   const int N = static_cast<int>(u[0].size());
   std::vector<Vector> ue(3, Vector::Zero(N + 2 * ng));
-  for (int k = 0; k < 3; ++k) {
+  for (int k = 0; k < num_equations_; ++k) {
     ue[k].segment(ng, N) = u[k];
   }
   for (int g = 0; g < ng; ++g) {
     extend_left_ghost(g, Trun, &ue);
-    const int idx = ng + N + g;
-    for (int k = 0; k < 3; ++k) {
-      ue[k](idx) = u[k](N - 1 - g);
-    }
+    extend_right_ghost(g, Trun, &ue);
   }
   return ue;
 }
 
-real_t Euler1D_WENO_FD::weno3_left_biased(const Vector& ue, const int iface) const
+// real_t Euler1D_WENO_FD::weno3_left_biased(const Vector& ue, const int iface) const
+// {
+//   const real_t um1 = ue(iface - 1);
+//   const real_t u0 = ue(iface);
+//   const real_t u1 = ue(iface + 1);
+
+//   const real_t p0 = 0.5e0 * (-um1 + 3.e0 * u0);
+//   const real_t p1 = 0.5e0 * (u0 + u1);
+
+//   const real_t beta0 = (u0 - um1) * (u0 - um1);
+//   const real_t beta1 = (u1 - u0) * (u1 - u0);
+
+//   const real_t a0 = (1.e0 / 3.e0) / ((kWenoEps + beta0) * (kWenoEps + beta0));
+//   const real_t a1 = (2.e0 / 3.e0) / ((kWenoEps + beta1) * (kWenoEps + beta1));
+//   return (a0 * p0 + a1 * p1) / (a0 + a1);
+// }
+
+// real_t Euler1D_WENO_FD::weno5_left_biased(const Vector& ue, const int iface) const
+// {
+//   const real_t um2 = ue(iface - 2);
+//   const real_t um1 = ue(iface - 1);
+//   const real_t u0 = ue(iface);
+//   const real_t u1 = ue(iface + 1);
+//   const real_t u2 = ue(iface + 2);
+
+//   const real_t p0 = (2.e0 * um2 - 7.e0 * um1 + 11.e0 * u0) / 6.e0;
+//   const real_t p1 = (-um1 + 5.e0 * u0 + 2.e0 * u1) / 6.e0;
+//   const real_t p2 = (2.e0 * u0 + 5.e0 * u1 - u2) / 6.e0;
+
+//   const real_t beta0 = (13.e0 / 12.e0) * std::pow(um2 - 2.e0 * um1 + u0, 2) +
+//                        0.25e0 * std::pow(um2 - 4.e0 * um1 + 3.e0 * u0, 2);
+//   const real_t beta1 = (13.e0 / 12.e0) * std::pow(um1 - 2.e0 * u0 + u1, 2) +
+//                        0.25e0 * std::pow(um1 - u1, 2);
+//   const real_t beta2 = (13.e0 / 12.e0) * std::pow(u0 - 2.e0 * u1 + u2, 2) +
+//                        0.25e0 * std::pow(3.e0 * u0 - 4.e0 * u1 + u2, 2);
+
+//   const real_t a0 = 0.1e0 / ((kWenoEps + beta0) * (kWenoEps + beta0));
+//   const real_t a1 = 0.6e0 / ((kWenoEps + beta1) * (kWenoEps + beta1));
+//   const real_t a2 = 0.3e0 / ((kWenoEps + beta2) * (kWenoEps + beta2));
+//   return (a0 * p0 + a1 * p1 + a2 * p2) / (a0 + a1 + a2);
+// }
+
+// real_t Euler1D_WENO_FD::weno3_right_biased(const Vector& ue, const int iface) const
+// {
+//   const real_t u0 = ue(iface);
+//   const real_t u1 = ue(iface + 1);
+//   const real_t u2 = ue(iface + 2);
+
+//   const real_t p0 = 0.5e0 * (-u2 + 3.e0 * u1);
+//   const real_t p1 = 0.5e0 * (u0 + u1);
+
+//   const real_t beta0 = (u2 - u1) * (u2 - u1);
+//   const real_t beta1 = (u1 - u0) * (u1 - u0);
+
+//   const real_t a0 = (1.e0 / 3.e0) / ((kWenoEps + beta0) * (kWenoEps + beta0));
+//   const real_t a1 = (2.e0 / 3.e0) / ((kWenoEps + beta1) * (kWenoEps + beta1));
+//   return (a0 * p0 + a1 * p1) / (a0 + a1);
+// }
+
+// real_t Euler1D_WENO_FD::weno5_right_biased(const Vector& ue, const int iface) const
+// {
+//   const real_t um1 = ue(iface - 1);
+//   const real_t u0 = ue(iface);
+//   const real_t u1 = ue(iface + 1);
+//   const real_t u2 = ue(iface + 2);
+//   const real_t u3 = ue(iface + 3);
+
+//   const real_t p0 = (2.e0 * u3 - 7.e0 * u2 + 11.e0 * u1) / 6.e0;
+//   const real_t p1 = (-u2 + 5.e0 * u1 + 2.e0 * u0) / 6.e0;
+//   const real_t p2 = (2.e0 * u1 + 5.e0 * u0 - um1) / 6.e0;
+
+//   const real_t beta0 = (13.e0 / 12.e0) * std::pow(u3 - 2.e0 * u2 + u1, 2) +
+//                        0.25e0 * std::pow(u3 - 4.e0 * u2 + 3.e0 * u1, 2);
+//   const real_t beta1 = (13.e0 / 12.e0) * std::pow(u2 - 2.e0 * u1 + u0, 2) +
+//                        0.25e0 * std::pow(u2 - u0, 2);
+//   const real_t beta2 = (13.e0 / 12.e0) * std::pow(u1 - 2.e0 * u0 + um1, 2) +
+//                        0.25e0 * std::pow(3.e0 * u1 - 4.e0 * u0 + um1, 2);
+
+//   const real_t a0 = 0.1e0 / ((kWenoEps + beta0) * (kWenoEps + beta0));
+//   const real_t a1 = 0.6e0 / ((kWenoEps + beta1) * (kWenoEps + beta1));
+//   const real_t a2 = 0.3e0 / ((kWenoEps + beta2) * (kWenoEps + beta2));
+//   return (a0 * p0 + a1 * p1 + a2 * p2) / (a0 + a1 + a2);
+// }
+
+Vector Euler1D_WENO_FD::weno3_left_biased(const std::vector<Vector>& unei) const
 {
-  const real_t um1 = ue(iface - 1);
-  const real_t u0 = ue(iface);
-  const real_t u1 = ue(iface + 1);
+  Vector temp(num_equations_);
+  for (int i = 0; i < num_equations_; ++i)
+  {
+    const real_t um1 = unei[0](i);
+    const real_t u0 = unei[1](i);
+    const real_t u1 = unei[2](i);
 
-  const real_t p0 = 0.5e0 * (-um1 + 3.e0 * u0);
-  const real_t p1 = 0.5e0 * (u0 + u1);
+    const real_t p0 = 0.5e0 * (-um1 + 3.e0 * u0);
+    const real_t p1 = 0.5e0 * (u0 + u1);
 
-  const real_t beta0 = (u0 - um1) * (u0 - um1);
-  const real_t beta1 = (u1 - u0) * (u1 - u0);
+    const real_t beta0 = (u0 - um1) * (u0 - um1);
+    const real_t beta1 = (u1 - u0) * (u1 - u0);
 
-  const real_t a0 = (1.e0 / 3.e0) / ((kWenoEps + beta0) * (kWenoEps + beta0));
-  const real_t a1 = (2.e0 / 3.e0) / ((kWenoEps + beta1) * (kWenoEps + beta1));
-  return (a0 * p0 + a1 * p1) / (a0 + a1);
-}
+    const real_t a0 = (1.e0 / 3.e0) / ((kWenoEps + beta0) * (kWenoEps + beta0));
+    const real_t a1 = (2.e0 / 3.e0) / ((kWenoEps + beta1) * (kWenoEps + beta1));
+    temp(i) = (a0 * p0 + a1 * p1) / (a0 + a1);
+  }
+  return temp;
+};
 
-real_t Euler1D_WENO_FD::weno5_left_biased(const Vector& ue, const int iface) const
+Vector Euler1D_WENO_FD::weno5_left_biased(const std::vector<Vector>& unei) const
 {
-  const real_t um2 = ue(iface - 2);
-  const real_t um1 = ue(iface - 1);
-  const real_t u0 = ue(iface);
-  const real_t u1 = ue(iface + 1);
-  const real_t u2 = ue(iface + 2);
+  Vector temp(num_equations_);
+  for (int i = 0; i < num_equations_; ++i)
+  {
+    const real_t um2 = unei[0](i);
+    const real_t um1 = unei[1](i);
+    const real_t u0 = unei[2](i);
+    const real_t u1 = unei[3](i);
+    const real_t u2 = unei[4](i);
 
-  const real_t p0 = (2.e0 * um2 - 7.e0 * um1 + 11.e0 * u0) / 6.e0;
-  const real_t p1 = (-um1 + 5.e0 * u0 + 2.e0 * u1) / 6.e0;
-  const real_t p2 = (2.e0 * u0 + 5.e0 * u1 - u2) / 6.e0;
+    const real_t p0 = (2.e0 * um2 - 7.e0 * um1 + 11.e0 * u0) / 6.e0;
+    const real_t p1 = (-um1 + 5.e0 * u0 + 2.e0 * u1) / 6.e0;
+    const real_t p2 = (2.e0 * u0 + 5.e0 * u1 - u2) / 6.e0;
 
-  const real_t beta0 = (13.e0 / 12.e0) * std::pow(um2 - 2.e0 * um1 + u0, 2) +
-                       0.25e0 * std::pow(um2 - 4.e0 * um1 + 3.e0 * u0, 2);
-  const real_t beta1 = (13.e0 / 12.e0) * std::pow(um1 - 2.e0 * u0 + u1, 2) +
-                       0.25e0 * std::pow(um1 - u1, 2);
-  const real_t beta2 = (13.e0 / 12.e0) * std::pow(u0 - 2.e0 * u1 + u2, 2) +
-                       0.25e0 * std::pow(3.e0 * u0 - 4.e0 * u1 + u2, 2);
+    const real_t beta0 = (13.e0 / 12.e0) * std::pow(um2 - 2.e0 * um1 + u0, 2) +
+                        0.25e0 * std::pow(um2 - 4.e0 * um1 + 3.e0 * u0, 2);
+    const real_t beta1 = (13.e0 / 12.e0) * std::pow(um1 - 2.e0 * u0 + u1, 2) +
+                        0.25e0 * std::pow(um1 - u1, 2);
+    const real_t beta2 = (13.e0 / 12.e0) * std::pow(u0 - 2.e0 * u1 + u2, 2) +
+                        0.25e0 * std::pow(3.e0 * u0 - 4.e0 * u1 + u2, 2);
 
-  const real_t a0 = 0.1e0 / ((kWenoEps + beta0) * (kWenoEps + beta0));
-  const real_t a1 = 0.6e0 / ((kWenoEps + beta1) * (kWenoEps + beta1));
-  const real_t a2 = 0.3e0 / ((kWenoEps + beta2) * (kWenoEps + beta2));
-  return (a0 * p0 + a1 * p1 + a2 * p2) / (a0 + a1 + a2);
-}
+    const real_t a0 = 0.1e0 / ((kWenoEps + beta0) * (kWenoEps + beta0));
+    const real_t a1 = 0.6e0 / ((kWenoEps + beta1) * (kWenoEps + beta1));
+    const real_t a2 = 0.3e0 / ((kWenoEps + beta2) * (kWenoEps + beta2));
+    temp(i) = (a0 * p0 + a1 * p1 + a2 * p2) / (a0 + a1 + a2);
+  }
+  return temp;
+};
 
-real_t Euler1D_WENO_FD::weno3_right_biased(const Vector& ue, const int iface) const
+Vector Euler1D_WENO_FD::weno3_right_biased(const std::vector<Vector>& unei) const
 {
-  const real_t u0 = ue(iface);
-  const real_t u1 = ue(iface + 1);
-  const real_t u2 = ue(iface + 2);
+  std::vector<Vector> uneitemp(x_order_);
+  for (int i = 0; i < x_order_; i++)
+  {
+    uneitemp[i] = unei[x_order_ - 1 - i];
+  };
+  return weno3_left_biased(uneitemp);
+};
 
-  const real_t p0 = 0.5e0 * (-u2 + 3.e0 * u1);
-  const real_t p1 = 0.5e0 * (u0 + u1);
-
-  const real_t beta0 = (u2 - u1) * (u2 - u1);
-  const real_t beta1 = (u1 - u0) * (u1 - u0);
-
-  const real_t a0 = (1.e0 / 3.e0) / ((kWenoEps + beta0) * (kWenoEps + beta0));
-  const real_t a1 = (2.e0 / 3.e0) / ((kWenoEps + beta1) * (kWenoEps + beta1));
-  return (a0 * p0 + a1 * p1) / (a0 + a1);
-}
-
-real_t Euler1D_WENO_FD::weno5_right_biased(const Vector& ue, const int iface) const
+Vector Euler1D_WENO_FD::weno5_right_biased(const std::vector<Vector>& unei) const
 {
-  const real_t um1 = ue(iface - 1);
-  const real_t u0 = ue(iface);
-  const real_t u1 = ue(iface + 1);
-  const real_t u2 = ue(iface + 2);
-  const real_t u3 = ue(iface + 3);
-
-  const real_t p0 = (2.e0 * u3 - 7.e0 * u2 + 11.e0 * u1) / 6.e0;
-  const real_t p1 = (-u2 + 5.e0 * u1 + 2.e0 * u0) / 6.e0;
-  const real_t p2 = (2.e0 * u1 + 5.e0 * u0 - um1) / 6.e0;
-
-  const real_t beta0 = (13.e0 / 12.e0) * std::pow(u3 - 2.e0 * u2 + u1, 2) +
-                       0.25e0 * std::pow(u3 - 4.e0 * u2 + 3.e0 * u1, 2);
-  const real_t beta1 = (13.e0 / 12.e0) * std::pow(u2 - 2.e0 * u1 + u0, 2) +
-                       0.25e0 * std::pow(u2 - u0, 2);
-  const real_t beta2 = (13.e0 / 12.e0) * std::pow(u1 - 2.e0 * u0 + um1, 2) +
-                       0.25e0 * std::pow(3.e0 * u1 - 4.e0 * u0 + um1, 2);
-
-  const real_t a0 = 0.1e0 / ((kWenoEps + beta0) * (kWenoEps + beta0));
-  const real_t a1 = 0.6e0 / ((kWenoEps + beta1) * (kWenoEps + beta1));
-  const real_t a2 = 0.3e0 / ((kWenoEps + beta2) * (kWenoEps + beta2));
-  return (a0 * p0 + a1 * p1 + a2 * p2) / (a0 + a1 + a2);
-}
+  std::vector<Vector> uneitemp(x_order_);
+  for (int i = 0; i < x_order_; i++)
+  {
+    uneitemp[i] = unei[x_order_ - 1 - i];
+  };
+  return weno5_left_biased(uneitemp);
+};
 
 Vector Euler1D_WENO_FD::flux_eval(const Vector& u) const
 {
@@ -200,6 +286,19 @@ Vector Euler1D_WENO_FD::flux_eval(const Vector& u) const
   const real_t pre = (u(2) - 0.5e0 * rho * vx * vx) * (gamma_ - 1.e0);
   Vector f(3);
   f << u(1), rho * vx * vx + pre, (u(2) + pre) * vx;
+  return f;
+}
+
+std::vector<Vector> Euler1D_WENO_FD::flux_eval(const std::vector<Vector>& u) const
+{
+  const Vector& rho = u[0];
+  const Vector vx = u[1].array() / rho.array();
+  const Vector pre = (u[2].array() - 0.5e0 * rho.array() * vx.array() * vx.array())
+                    * (gamma_ - 1.e0);
+  std::vector<Vector> f(num_equations_);
+  f[0] = u[1];
+  f[1] = rho.array() * vx.array() * vx.array() + pre.array();
+  f[2] = (u[2].array() + pre.array()) * vx.array();
   return f;
 }
 
@@ -230,56 +329,64 @@ void Euler1D_WENO_FD::Lu_compute(const std::vector<Vector>& u, const real_t& Tru
   const real_t hx = mesh1D_->gethx();
   const std::vector<Vector> ue = extend_with_ghost(u, Trun);
 
-  std::vector<Vector> flux(3, Vector::Zero(N + 1));
+  std::vector<Vector> fue = flux_eval(ue);
+  std::vector<Vector> flux(num_equations_, Vector::Zero(N + 1));
+  real_t alpha = max_wave_speed(u);
+  std::vector<Vector> fplus;
+  fplus = 0.5e0 * (fue + alpha * ue);
+  std::vector<Vector> fminus;
+  fminus = 0.5e0 * (fue - alpha * ue);
+
   for (int i = 0; i <= N; ++i) {
     const int iface = i + 2;
+    // std::cout << " i = " << i << ", iface = " << iface << std::endl;
 
     Vector u_avg(3);
-    for (int k = 0; k < 3; ++k) {
+    for (int k = 0; k < num_equations_; ++k) {
       u_avg(k) = 0.5e0 * (ue[k](iface) + ue[k](iface + 1));
-    }
+    };
 
-    Matrix R(3, 3), L(3, 3);
+    Matrix R(num_equations_, num_equations_);
+    Matrix L(num_equations_, num_equations_);
     real_t alpha = 0.e0;
     eigensystem_from_state(u_avg, &R, &L, &alpha);
 
-    std::vector<Vector> gplus(3, Vector::Zero(ue[0].size()));
-    std::vector<Vector> gminus(3, Vector::Zero(ue[0].size()));
-
-    for (int s = iface - 3; s <= iface + 3; ++s) {
-      Vector uq(3);
-      uq << ue[0](s), ue[1](s), ue[2](s);
-      const Vector fq = flux_eval(uq);
-
-      const Vector w = L * uq;
-      const Vector g = L * fq;
-      const Vector gp = 0.5e0 * (g.array() + alpha * w.array()).matrix();
-      const Vector gm = 0.5e0 * (g.array() - alpha * w.array()).matrix();
-
-      for (int m = 0; m < 3; ++m) {
-        gplus[m](s) = gp(m);
-        gminus[m](s) = gm(m);
-      }
-    }
-
-    Vector ghat(3);
-    for (int m = 0; m < 3; ++m) {
-      const real_t gp_hat = (x_order_ == 3) ? weno3_left_biased(gplus[m], iface)
-                                             : weno5_left_biased(gplus[m], iface);
-      const real_t gm_hat = (x_order_ == 3) ? weno3_right_biased(gminus[m], iface)
-                                             : weno5_right_biased(gminus[m], iface);
-      ghat(m) = gp_hat + gm_hat;
-    }
-
-    const Vector fhat = R * ghat;
-    for (int k = 0; k < 3; ++k) {
+    int k;
+    k = (x_order_ - 1) / 2;
+    std::vector<Vector> gplus_nei(x_order_);
+    std::vector<Vector> gminus_nei(x_order_);
+    int index = 0;
+    for (int s = iface - k; s <= iface + k; ++s) 
+    {
+      Vector ftemp(num_equations_);
+      ftemp << fplus[0](s), fplus[1](s), fplus[2](s);
+      gplus_nei[index] = L * ftemp;
+      index++;
+    };
+    Vector gplus_hat = (x_order_ == 3) ? weno3_left_biased(gplus_nei)
+                                      : weno5_left_biased(gplus_nei);
+    
+    index = 0;
+    for (int s = iface - k + 1; s <= iface + k + 1; ++s) 
+    {
+      Vector ftemp(num_equations_);
+      ftemp << fminus[0](s), fminus[1](s), fminus[2](s);
+      gminus_nei[index] = L * ftemp;
+      index++;
+    };
+    Vector gminus_hat = (x_order_ == 3) ? weno3_right_biased(gminus_nei)
+                                      : weno5_right_biased(gminus_nei);
+    const Vector fhat = R * (gplus_hat + gminus_hat);
+    for (int k = 0; k < num_equations_; ++k) 
+    {
       flux[k](i) = fhat(k);
-    }
+    };
   }
 
-  Lu->assign(3, Vector::Zero(N));
-  for (int k = 0; k < 3; ++k) {
-    (*Lu)[k].array() = -(flux[k].tail(N).array() - flux[k].head(N).array()) / hx;
+  Lu->assign(num_equations_, Vector::Zero(N));
+  for (int k = 0; k < num_equations_; ++k) 
+  {
+    (*Lu)[k].array() = - (flux[k].tail(N).array() - flux[k].head(N).array()) / hx;
   }
 }
 
@@ -291,7 +398,7 @@ void Euler1D_WENO_FD::updateAll(const real_t& Trun, const real_t& dt)
   const int stages = rk_table_->getstages();
 
   for (int s = 0; s < stages; ++s) {
-    for (int k = 0; k < 3; ++k) {
+    for (int k = 0; k < num_equations_; ++k) {
       u_stages_[s][k].setZero();
       for (int j = 0; j < s; ++j) {
         u_stages_[s][k] += A(s, j) * u_stages_[j][k] + dt * Be(s, j) * Lu_stages_[j][k];
@@ -311,17 +418,14 @@ void Euler1D_WENO_FD::updateAll(const real_t& Trun, const real_t& dt)
 real_t Euler1D_WENO_FD::rho_init(const real_t& x) const { return 1.e0 + 0.2e0 * std::sin(2.e0 * pi_ * x); }
 Vector Euler1D_WENO_FD::rho_init(const Vector& x) const { return (1.e0 + 0.2e0 * (2.e0 * pi_ * x.array()).sin()).matrix(); }
 real_t Euler1D_WENO_FD::rho_bc(const real_t& x, const real_t&) const { return rho_init(x); }
-Vector Euler1D_WENO_FD::rho_bc(const Vector& x, const real_t&) const { return rho_init(x); }
 
 real_t Euler1D_WENO_FD::vx_init(const real_t&) const { return 1.e0; }
 Vector Euler1D_WENO_FD::vx_init(const Vector& x) const { return Vector::Ones(x.size()); }
 real_t Euler1D_WENO_FD::vx_bc(const real_t& x, const real_t&) const { return vx_init(x); }
-Vector Euler1D_WENO_FD::vx_bc(const Vector& x, const real_t&) const { return vx_init(x); }
 
 real_t Euler1D_WENO_FD::pre_init(const real_t&) const { return 1.e0; }
 Vector Euler1D_WENO_FD::pre_init(const Vector& x) const { return Vector::Ones(x.size()); }
 real_t Euler1D_WENO_FD::pre_bc(const real_t& x, const real_t&) const { return pre_init(x); }
-Vector Euler1D_WENO_FD::pre_bc(const Vector& x, const real_t&) const { return pre_init(x); }
 
 Euler1D_WENO_FD_period::Euler1D_WENO_FD_period(const FDmesh_period* mesh1D,
                                                const EX_TVDRK* rk_table,
@@ -347,19 +451,54 @@ std::vector<Vector> Euler1D_WENO_FD_period::extend_with_ghost(const std::vector<
 void Euler1D_WENO_FD_period::extend_left_ghost(const int, const real_t, std::vector<Vector>*) const {}
 void Euler1D_WENO_FD_period::extend_right_ghost(const int, const real_t, std::vector<Vector>*) const {}
 
-real_t Euler1D_WENO_FD_period::rho_init(const real_t& x) const { return 1.e0 + 0.2e0 * std::sin(2.e0 * pi_ * x); }
-Vector Euler1D_WENO_FD_period::rho_init(const Vector& x) const { return (1.e0 + 0.2e0 * (2.e0 * pi_ * x.array()).sin()).matrix(); }
-real_t Euler1D_WENO_FD_period::rho_bc(const real_t& x, const real_t&) const { return rho_init(x); }
-Vector Euler1D_WENO_FD_period::rho_bc(const Vector& x, const real_t&) const { return rho_init(x); }
+real_t Euler1D_WENO_FD_period::rho_init(const real_t& x) const 
+{ 
+  return 1.e0 + 0.2e0 * std::sin(x); 
+};
+
+Vector Euler1D_WENO_FD_period::rho_init(const Vector& x) const 
+{ 
+  Vector temp = 1.e0 + 0.2e0 * x.array().sin();
+  return temp; 
+};
+
+real_t Euler1D_WENO_FD_period::rho_bc(const real_t& x, const real_t&) const 
+{ 
+  QUEST_ERROR("rho_bc() Boundary condition should not be called for periodic case.");
+  return rho_init(x); 
+};
+
+real_t Euler1D_WENO_FD_period::rho_real(const real_t& x, const real_t& t) const
+{
+  return 1.e0 + 0.2e0 * std::sin(x - t);
+};
+
+Vector Euler1D_WENO_FD_period::rho_real(const Vector& x, const real_t& t) const
+{
+  Vector temp = 1.e0 + 0.2e0 * ((x.array() - t)).sin();
+  return temp;
+};
 
 real_t Euler1D_WENO_FD_period::vx_init(const real_t&) const { return 1.e0; }
 Vector Euler1D_WENO_FD_period::vx_init(const Vector& x) const { return Vector::Ones(x.size()); }
-real_t Euler1D_WENO_FD_period::vx_bc(const real_t& x, const real_t&) const { return vx_init(x); }
-Vector Euler1D_WENO_FD_period::vx_bc(const Vector& x, const real_t&) const { return vx_init(x); }
+real_t Euler1D_WENO_FD_period::vx_bc(const real_t& x, const real_t&) const 
+{ 
+  QUEST_ERROR("vx_bc() Boundary condition should not be called for periodic case.");
+  return vx_init(x); 
+};
+
+real_t Euler1D_WENO_FD_period::vx_real(const real_t& x, const real_t&) const { return vx_init(x); }
+Vector Euler1D_WENO_FD_period::vx_real(const Vector& x, const real_t&) const { return vx_init(x); }
 
 real_t Euler1D_WENO_FD_period::pre_init(const real_t&) const { return 1.e0; }
 Vector Euler1D_WENO_FD_period::pre_init(const Vector& x) const { return Vector::Ones(x.size()); }
-real_t Euler1D_WENO_FD_period::pre_bc(const real_t& x, const real_t&) const { return pre_init(x); }
-Vector Euler1D_WENO_FD_period::pre_bc(const Vector& x, const real_t&) const { return pre_init(x); }
+real_t Euler1D_WENO_FD_period::pre_bc(const real_t& x, const real_t&) const 
+{ 
+  QUEST_ERROR("pre_bc() Boundary condition should not be called for periodic case.");
+  return pre_init(x); 
+};
+
+real_t Euler1D_WENO_FD_period::pre_real(const real_t& x, const real_t&) const { return pre_init(x); }
+Vector Euler1D_WENO_FD_period::pre_real(const Vector& x, const real_t&) const { return pre_init(x); }
 
 } // namespace QUEST
