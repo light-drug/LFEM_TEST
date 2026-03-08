@@ -11,14 +11,17 @@ HyperbolicProblems1DBase::HyperbolicProblems1DBase(const TensorMesh1D* mesh1D,
   // ********* 传入相关变量 ********** //
   num_equations_ = fe_->getnum_equations();
   const int& stages = rk_table_->getstages();
+  const int& ncell = mesh1D_->getncell();
+  const int& polydim = fe_->getbasis()->getpolydim();
+  const int intboundaryNum = mesh1D_->getintboundaryNum();
+  const int extboundaryNum = mesh1D_->getextboundaryNum();
   // ******************************** //
-  u_modal_.resize(num_equations_, Matrix::Zero(polydim_, ncell_));
-  u_modal_stages_.resize(stages, u_modal);
-  Lu_stages_.resize(stages, u_modal);
-  fu_nodal_.resize(dim_, u_nodal_);
+  u_modal_.resize(num_equations_, Matrix::Zero(polydim, ncell));
+  u_modal_stages_.resize(stages, u_modal_);
+  Lu_stages_.resize(stages, u_modal_);
 
-  flux_int_.resize(num_equations_, Matrix::Zero(1, intboundaryNum_));
-  flux_ext_.resize(num_equations_, Matrix::Zero(1, extboundaryNum_));
+  flux_int_.resize(num_equations_, Matrix::Zero(1, intboundaryNum));
+  flux_ext_.resize(num_equations_, Matrix::Zero(1, extboundaryNum));
 
 };
 

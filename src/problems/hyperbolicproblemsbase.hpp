@@ -5,6 +5,8 @@
 #include "config.hpp"
 #include <vector>
 
+#include "RK_table.hpp"
+
 namespace QUEST
 {
 
@@ -33,7 +35,9 @@ public:
                                 const std::vector<Matrix>& Dirichlet,
                                 std::vector<Matrix>* flux_ext) = 0;
   virtual void numerical_flux(const Vector& u_L, const Vector& u_R,
-                              const real_t& normal, Vector* flux) = 0;
+                              const real_t& normal, 
+                              const real_t& max_speed,
+                              Vector* flux) = 0;
 
   virtual void setcfl(const real_t& cfl);
 

@@ -15,18 +15,33 @@ Matrix Euler1D_DG_TVDRK::rho_init(const Matrix& x) {
   return result;
 }
 
+real_t Euler1D_DG_TVDRK::rho_init(const real_t& x) {
+  real_t result;
+  result = pi_ * x;
+  result = 1 + 0.2e0 * std::sin(result);
+  return result;
+};
+
+real_t Euler1D_DG_TVDRK::rho_bc(const real_t& x, const real_t& t) {
+  real_t result;
+  result = pi_ * (x - t);
+  result = 1 + 0.2e0 * std::sin(result);
+  return result;
+};
+
 Matrix Euler1D_DG_TVDRK::vx_init(const Matrix& x) {
   Matrix result;
   result = Matrix::Constant(x.rows(), x.cols(), 1.e0);
   return result;
 }
 
-Matrix Euler1D_DG_TVDRK::rhovx_init(const Matrix& x) {
-  Matrix result = rho_init(x);
-  Matrix temp = vx_init(x);
-  result = result.array() * temp.array();
-  return result;
-}
+real_t Euler1D_DG_TVDRK::vx_init(const real_t& x) {
+  return 1.e0;
+};
+
+real_t Euler1D_DG_TVDRK::vx_bc(const real_t& x, const real_t& t) {
+  return 1.e0;
+};
 
 Matrix Euler1D_DG_TVDRK::pre_init(const Matrix& x) {
   Matrix result;
@@ -34,17 +49,18 @@ Matrix Euler1D_DG_TVDRK::pre_init(const Matrix& x) {
   return result;
 };
 
-Matrix Euler1D_DG_TVDRK::erg_init(const Matrix& x) {
-  Matrix pre = pre_init(x);
-  Matrix rho = rho_init(x);
-  Matrix vx = vx_init(x);
-  Matrix result = pre.array() / (gamma_ - 1.e0) + 0.5e0 * vx.array().square() * rho.array();
-  return result;
-}
+real_t Euler1D_DG_TVDRK::pre_init(const real_t& x) {
+  return 1.e0;
+};
+
+real_t Euler1D_DG_TVDRK::pre_bc(const real_t& x, const real_t& t) {
+  return 1.e0;
+};
 
 void Euler1D_DG_TVDRK::init() 
 {
-  fe_->Project_Initial(&rho_init, &u_modal_[0]);
+  fe_->Project_Initial(
+      [this](const Matrix& x) { return this->rho_init(x); }, &u_modal_[0]);
   Matrix rho_nodal;
   fe_->Interpolate_Initial(
       [this](const Matrix& x) { return this->rho_init(x); }, &rho_nodal);
@@ -59,26 +75,28 @@ void Euler1D_DG_TVDRK::init()
   Matrix erg_nodal = 
     pre_nodal.array() / (gamma_ - 1.e0) + 
     0.5e0 * vx_nodal.array().square() * rho_nodal.array();
-  fe_->Project_Initial(erg_nodal, &(u_modal_[2]));
+  fe_->nodal_to_modal1D(erg_nodal, &(u_modal_[2]));
   
 };
 
 void Euler1D_DG_TVDRK::setdt(real_t* dt) {
   const int& polydim = fe_->getbasis()->getpolydim();
   const int& k1D = fe_->getbasis()->getk1D();
+  const real_t& hx = mesh1D_->gethx();
+
   real_t max_speed = max_speed_compute(u_modal_);
-  *dt = cfl_ * hx_ / max_speed / real_t(2 * k1D - 1);
+  *dt = cfl_ * hx / max_speed / real_t(2 * k1D - 1);
 };
 
 real_t Euler1D_DG_TVDRK::max_speed_compute(const std::vector<Matrix>& u_modal)
 {
   std::vector<Matrix> u_nodal;
   fe_->modal_to_nodal1D(u_modal, &u_nodal);
-  Matrix pre_nodal = u_nodal[2].array() - 0.5e0 * 
-    (u_nodal[1].array().square() / u_nodal[0].array());
+  Matrix pre_nodal = (u_nodal[2].array() - 0.5e0 * 
+    (u_nodal[1].array().square() / u_nodal[0].array())) * (gamma_ - 1.e0);
   Matrix sound_nodal = gamma_ * (pre_nodal.array() / u_nodal[0].array());
   Matrix vx_nodal = u_nodal[1].array() / u_nodal[0].array();
-  real_t max_speed = vx_nodal.cwiseAbs() + sound_nodal;
+  real_t max_speed = (vx_nodal.cwiseAbs().array() + sound_nodal.array()).maxCoeff();
   return max_speed;
 }
 
@@ -91,20 +109,21 @@ void Euler1D_DG_TVDRK::updateAll(const real_t& Trun, const real_t& dt)
 
   for (int s = 0; s < stages; ++s) {
     for (int k = 0; k < num_equations_; ++k) {
-      u_stages_[s][k].setZero();
+      u_modal_stages_[s][k].setZero();
       for (int j = 0; j < s; ++j) {
-        u_stages_[s][k] += A(s, j) * u_stages_[j][k] + dt * Be(s, j) * Lu_stages_[j][k];
+        u_modal_stages_[s][k] += A(s, j) * u_modal_stages_[j][k] 
+                              + dt * Be(s, j) * Lu_stages_[j][k];
       }
       if (s == 0) {
-        u_stages_[s][k] = u_[k];
+        u_modal_stages_[s][k] = u_modal_[k];
       }
     }
     if (s == stages - 1) {
       break;
     }
-    Lu_compute(u_stages_[s], Trun + c(s) * dt, &Lu_stages_[s]);
+    Lu_compute(u_modal_stages_[s], Trun, c(s) * dt, &Lu_stages_[s]);
   }
-  u_ = u_stages_[stages - 1];
+  u_modal_ = u_modal_stages_[stages - 1];
 };
 
 void Euler1D_DG_TVDRK::fu_compute(const std::vector<Matrix>& u_modal,
@@ -113,7 +132,7 @@ void Euler1D_DG_TVDRK::fu_compute(const std::vector<Matrix>& u_modal,
   std::vector<Matrix> u_nodal;
   fe_->modal_to_nodal1D(u_modal, &u_nodal);
   Matrix kie_nodal = u_nodal[1].array().square() / u_nodal[0].array();
-  Matrix pre_nodal = (u_nodal[2].array() - 0.5e0 * kie_nodal) * (gamma_ - 1);
+  Matrix pre_nodal = (u_nodal[2] - 0.5e0 * kie_nodal) * (gamma_ - 1);
   Matrix vx_nodal = u_nodal[1].array() / u_nodal[0].array();
 
   fu_nodal->resize(num_equations_);

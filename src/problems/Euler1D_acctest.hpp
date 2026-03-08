@@ -23,6 +23,8 @@ public:
   Euler1D_DG_TVDRK(const TensorMesh1D* mesh1D,
                   const fespace1D* fe, 
                   const EX_TVDRK* rk_table);
+  // u_modal_: rho, rhovx, E
+  // fu: rhovx, rho*vx^2 + pre, (E + pre) * vx
 
   ~Euler1D_DG_TVDRK() override = default;
 

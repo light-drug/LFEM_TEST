@@ -1057,20 +1057,23 @@ void KineticDriftD_DG_IMEX_IM_Schur::ch_compute(const model_data_& modal,
     {
       g_diff_nodal.setZero();
       for (int i = 0; i < ncell; i++)
-      {
-        wind = modal.E(0, i) >= 0 ? -1 : 1;
-        switch (wind)
+      { 
+        for (int q = 0; q < numqua; q++)
         {
-          case -1:
-            g_diff_nodal.col(i) = (flux_downwind_nodal[j+1].col(i) - 
-                                  flux_downwind_nodal[j].col(i)) * hvinv;
-            
-            break;
-          case 1:
-            g_diff_nodal.col(i) = (flux_upwind_nodal[j+1].col(i) - 
-                                  flux_upwind_nodal[j].col(i)) * hvinv;
-            break;
-        }
+          wind = E_nodal(q, i) >= 0 ? -1 : 1;
+          switch (wind)
+          {
+            case -1:
+              g_diff_nodal(q, i) = (flux_downwind_nodal[j+1](q, i) - 
+                                    flux_downwind_nodal[j](q, i)) * hvinv;
+              
+              break;
+            case 1:
+              g_diff_nodal(q, i) = (flux_upwind_nodal[j+1](q, i) - 
+                                    flux_upwind_nodal[j](q, i)) * hvinv;
+              break;
+          };
+        };
       }
       g_diff_nodal = - 1.e0 * g_diff_nodal.array() * E_nodal.array();
       fe_->Assemble_F(g_diff_nodal, 0, &((*ch)[j]));
@@ -1104,10 +1107,10 @@ void KineticDriftD_DG_IMEX_IM_Schur::WENO3_VelocityReconstruct(
   // *** 
   flux_upwind_nodal->resize(Nv + 1);
   flux_downwind_nodal->resize(Nv + 1);
-  flux_upwind_nodal->at(0) = Matrix::Zero(numqua, ncell);
-  flux_downwind_nodal->at(0) = Matrix::Zero(numqua, ncell);
-  flux_upwind_nodal->at(Nv) = Matrix::Zero(numqua, ncell);
-  flux_downwind_nodal->at(Nv) = Matrix::Zero(numqua, ncell);
+  flux_upwind_nodal->at(0) = zero_nodal_mat_;
+  flux_downwind_nodal->at(0) = zero_nodal_mat_;
+  flux_upwind_nodal->at(Nv) = zero_nodal_mat_;
+  flux_downwind_nodal->at(Nv) = zero_nodal_mat_;
 
   Vector beta0, beta1;
   const real_t d0 = 2.e0 / 3.e0;
