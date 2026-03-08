@@ -61,6 +61,14 @@ public:
                       Vector* flux) override;
 
   virtual void setgamma(const real_t& gamma);
+  virtual void setlimiter(const bool enable_limiter, const real_t theta = 1.5e0);
+
+protected:
+  void tvd_limiter_characteristic(std::vector<Matrix>* u_modal);
+  real_t minmod3(const real_t a, const real_t b, const real_t c) const;
+
+  bool use_limiter_ = false;
+  real_t limiter_theta_ = 1.5e0;
 
 };
 
