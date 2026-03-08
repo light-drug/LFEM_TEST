@@ -12,37 +12,46 @@ class HyperbolicProblems1DBase
 {
 public:
 
-  HyperbolicProblems1DBase(const fespace1D* fe, const int& t_order);
+  HyperbolicProblems1DBase(const TensorMesh1D* mesh1D,
+                          const fespace1D* fe, 
+                          const EX_TVDRK* rk_table);
 
-  ~HyperbolicProblems1DBase() = default;
+  virtual ~HyperbolicProblems1DBase() = default;
 
   virtual void init() = 0;
   virtual void setdt(real_t* dt) = 0;
-  virtual void time_stepping(real_t& dt) = 0;
-  virtual void update() = 0;
+  virtual real_t max_speed_compute(const std::vector<Matrix>& u_modal) = 0;
+  virtual void updateAll(const real_t& Trun, const real_t& dt) = 0;
+  virtual void fu_compute(const std::vector<Matrix>& u_modal,
+                          std::vector<Matrix>* fu_nodal) = 0;
+  virtual void Lu_compute(const std::vector<Matrix>& u_modal,
+                          const real_t& Trun, const real_t& dt,
+                          std::vector<Matrix>* Lu) = 0;
+  virtual void fluxint_compute(const std::vector<Matrix>& u_modal,
+                                std::vector<Matrix>* flux_int) = 0;
+  virtual void fluxext_compute(const std::vector<Matrix>& u_modal,
+                                const std::vector<Matrix>& Dirichlet,
+                                std::vector<Matrix>* flux_ext) = 0;
+  virtual void numerical_flux(const Vector& u_L, const Vector& u_R,
+                              const real_t& normal, Vector* flux) = 0;
+
+  virtual void setcfl(const real_t& cfl);
 
   const std::vector<Matrix>& getumodal() const;
-  const std::vector<Matrix>& getunodal() const;
-  const std::vector<std::vector<Matrix>>& getfunodal() const;
-
 
 protected: 
-
+  
+  const TensorMesh1D* mesh1D_;
   const fespace1D* fe_;
-  const int& t_order_;
+  const EX_TVDRK* rk_table_;
+
+  real_t cfl_;
 
   int num_equations_;
-  int intboundaryNum_;
-  int extboundaryNum_;
-  int dim_;
-  int polydim_;
-  int numqua_;
-  int ncell_;
-  int hx_;
-  int NTH_;
+
   std::vector<Matrix> u_modal_;
-  std::vector<Matrix> u_nodal_;
-  std::vector<std::vector<Matrix>> fu_nodal_;
+  std::vector<std::vector<Matrix>> u_modal_stages_;
+  std::vector<std::vector<Matrix>> Lu_stages_;
   std::vector<Matrix> flux_int_;
   std::vector<Matrix> flux_ext_;
 
