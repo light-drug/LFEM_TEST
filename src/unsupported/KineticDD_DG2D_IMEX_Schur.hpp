@@ -76,6 +76,7 @@ protected:
     Matrix E;
   };
 
+  Matrix V_nodal_;
   Matrix rho_d_modal_;
   Matrix rho_d_nodal_;
   model_data_ kinetic_modal_;
@@ -92,6 +93,9 @@ protected:
   Matrix zero_nodal_mat_;
 
   std::vector<std::vector<Matrix>> mixedflux_u_v_;
+  std::vector<Matrix> boundary_u_rho_;
+  Matrix test_ref1D_, test_ref1D_T_;
+  Matrix test_ref1D_dx_;
 
 public:
   KineticDD_DG2d_IMEX_IM_Schur(const TensorMesh1D* mesh1D,
@@ -118,14 +122,8 @@ public:
   virtual const Matrix& getrho_d_modal() const;
 
   virtual void D_compute(const real_t& be, SparseMatrix* D);
-  virtual void Da_compute(const real_t& Trun,
-                            const real_t& dt,
-                            SparseMatrix* Da);
-
-  virtual void Db_compute(const real_t& Trun,
-                            const real_t& dt, 
-                            const SparseMatrix& Db,
-                            SparseMatrix* Db);
+  virtual void Da_compute(const real_t& be, SparseMatrix* Da);
+  virtual void Db_compute(const real_t& be, SparseMatrix* Db);
 
   virtual void M_compute(SparseMatrix* M);
   virtual void Mbc_compute(SparseMatrix* Mbc);
@@ -211,6 +209,8 @@ public:
   virtual real_t fsource(const real_t& x, const real_t& v, const real_t& t);
   virtual Matrix rho_d(const Matrix& x);
   virtual real_t rho_d(const real_t& x);
+  virtual Matrix V_value(const Matrix& x, const Matrix& v);
+  virtual real_t V_value(const real_t& x, const real_t& v);
 
   virtual real_t fL_bc(const int& j, const real_t& t,
                       const model_data_& modal);

@@ -38,6 +38,7 @@ protected:
   real_t schur_tol_;
   real_t iter_tol_;
   real_t gamma_; // Debye length
+  real_t timeratio_;
   int NTH_;
   int stages_;
   real_t Maxwell_sum_;
@@ -107,6 +108,7 @@ public:
   virtual void setgamma(const real_t& gamma);
   virtual void settheta(const real_t& theta);
   virtual void setNTH(const int& NTH);
+  virtual void settimeratio(const real_t& timeratio);
   virtual void setsparsetol(const real_t& schur_tol);
   virtual void setitertol(const real_t& iter_tol);
 
@@ -174,7 +176,11 @@ public:
   virtual void WENO3_VelocityReconstruct(const std::vector<Matrix>& g,
                                         const std::vector<Matrix>& g_nodal,
                                         std::vector<Matrix>* flux_upwind_nodal,
-                                        std::vector<Matrix>* flux_downwind_nodal);                
+                                        std::vector<Matrix>* flux_downwind_nodal);
+  virtual void WENO3_left_biased(const Eigen::Ref<const Vector>& g2,
+                                const Eigen::Ref<const Vector>& g1,
+                                const Eigen::Ref<const Vector>& g0,
+                                Eigen::Ref<Vector> g_reconstruct);      
 
   virtual void dh_compute(const Matrix& rho, 
                           const std::vector<Matrix>& g,
