@@ -88,6 +88,8 @@ void KineticDD_DG2d_IMEX_IM_Schur::MixedFlux_compute()
   const int& polydim_rho = fe1D_->getbasis()->getpolydim();
   const int& NTdofs_rho = fe1D_->getNTdofs();
   const int& numqua_rho = fe1D_->getnumqua();
+  const Matrix& test_ref_rho = fe1D_->gettest_ref();
+  const Matrix& test_ref_dx_rho = fe1D_->gettest_dx_ref();
   const int& ncell_g = kinetic_mesh2D_->getncell();
   const int& polydim_g = kinetic_fe2D_->getbasis()->getpolydim();
   const int& NTdofs_g = kinetic_fe2D_->getNTdofs();
@@ -100,10 +102,11 @@ void KineticDD_DG2d_IMEX_IM_Schur::MixedFlux_compute()
     kinetic_fe2D_->getwqua_diag1d();
   // *** 
 
+  boundary_u_rho_.resize(2);
   Matrix ones(1, numqua_rho);
   for (int i = 0; i < boundary_u_rho_temp.size(); i++)
   {
-    boundary_u_rho[i] = boundary_u_rho_temp[i] * ones;
+    boundary_u_rho_[i] = boundary_u_rho_temp[i] * ones;
   }
   mixedflux_u_v_.resize(2);
   for (int i = 0; i < 2; i++)
@@ -115,7 +118,26 @@ void KineticDD_DG2d_IMEX_IM_Schur::MixedFlux_compute()
     };
   };
 
-}
+  test_ref1D_.resize(numqua_g, polydim_rho);
+  test_ref1D_dx_.resize(numqua_g, polydim_rho);
+  int index = 0;
+  for (int qy = 0; qy < qua_order1D_; qy++)
+  {
+    for (int qx = 0; qx < qua_order1D_; qx++)
+    {
+      wqua2d_(index) = wqua(qy) * wqua(qx);
+      CoorRef_(0, index) = xqua(qx);
+      CoorRef_(1, index) = xqua(qy);
+      for (int i = 0; i < ploydim_rho; i++)
+      {
+        test_ref1D_(i, index) = test_ref_rho(i, qx);
+        test_ref1D_dx_(i, index) = test_ref_dx_rho(i, qx);
+      }
+      index++;
+    }
+  };
+  test_ref1D_T_ = test_ref1D_.transpose();
+};
 
 void KineticDD_DG2d_IMEX_IM_Schur::init()
 {
@@ -156,6 +178,8 @@ void KineticDD_DG2d_IMEX_IM_Schur::init()
       [this](const Matrix& x) { return this->rho_d(x); }, &rho_d_modal_);
   fe_->Interpolate_Initial(
       [this](const Matrix& x) { return this->rho_d(x); }, &rho_d_nodal_);
+  kinetic_fe2D_->Interpolate_Initial(
+              [this](const Matrix& x, const Matrix& v) { return this->V_value(x, v); }, &V_nodal_);
   kinetic_modal_.g.resize(Nv);
   real_t vj;
   for (int j = 0; j < Nv; j++) {
@@ -169,9 +193,8 @@ void KineticDD_DG2d_IMEX_IM_Schur::init()
 
   D_compute(beta1_, &Da_);
   Da_ = - Da_;
-  Da_ext_treat(0.e0, 0.e0, Da_, &Da_ext_);
-  D_compute(- beta1_, &Db_); // 交替通量
-  Db_ext_treat(0.e0, 0.e0, Db_, &Db_ext_);
+  Da_compute(beta1_, &Da_);
+  Db_compute(- beta1_, &Db_); // 交替通量
 
   M_compute(&M_);
   Mbc_compute(&Mbc_);
@@ -327,16 +350,14 @@ void KineticDD_DG2d_IMEX_IM_Schur::D_compute(const real_t& be, SparseMatrix* D)
   D->setFromTriplets(tripletList_D.begin(), tripletList_D.end());
 };
 
-void KineticDD_DG2d_IMEX_IM_Schur::Da_compute(const real_t& Trun,
-                            const real_t& dt,
-                            SparseMatrix* Da)
+void KineticDD_DG2d_IMEX_IM_Schur::Da_compute(const real_t& beta,
+                                              SparseMatrix* Da)
 {
   // ********* 传入相关变量 ********** //
   const int& ncell_rho = mesh1D_->getncell();
   const int& polydim_rho = fe1D_->getbasis()->getpolydim();
   const int& NTdofs_rho = fe1D_->getNTdofs();
   const int& numqua_rho = fe1D_->getnumqua();
-  const std::vector<Vector>& boundary_u_rho_temp = fe1D_->getboundary_u();
   const Matrix& Tm_rho = fe1D_->getTm();
   const int& ncell_g = kinetic_mesh2D_->getncell();
   const int& polydim_g = kinetic_fe2D_->getbasis()->getpolydim();
@@ -346,6 +367,9 @@ void KineticDD_DG2d_IMEX_IM_Schur::Da_compute(const real_t& Trun,
   const Matrix& Tm_g = kinetic_fe2D_->getTm();
   const DiagnalMatrix& wqua_diag1d_ref = 
     kinetic_fe2D_->getwqua_diag1d();
+  const DiagnalMatrix& wqua_diag_ref = 
+    kinetic_fe2D_->getwqua_diag();
+  const Matrix& test_ref2D = kinetic_mesh2D_->gettest_ref();
   const int& Nx = kinetic_mesh2D_->getxDiv();
   const int& Nv = kinetic_mesh2D_->getyDiv();
   const real_t& hx = kinetic_mesh2D_->gethx();
@@ -353,7 +377,8 @@ void KineticDD_DG2d_IMEX_IM_Schur::Da_compute(const real_t& Trun,
 
   const Matrix& dv_u = fe1D_->getdv_u();
   const Matrix& v_u = fe1D_->getv_u();
-  const Vector& JacobiDet = mesh1D_->getJacobiDet();
+  const Vector& JacobiDet_rho = mesh1D_->getJacobiDet();
+  const Vector& JacobiDet_g = mesh2D_->getJacobiDet();
   const Vector& Jx = mesh1D_->getJx();
 
   const std::vector<Eigen::Vector2d>& intnormals = 
@@ -374,26 +399,71 @@ void KineticDD_DG2d_IMEX_IM_Schur::Da_compute(const real_t& Trun,
     kinetic_mesh2D_->getextboundaryNum();
   const std::vector<int>& ExtBTypeIndex =
     kinetic_mesh2D_->getextboundarytypeindex();
-  const std::vector<Eigen::Vector2d> extboundarycenter = 
+  const std::vector<Eigen::Vector2d>& extboundarycenter = 
     kinetic_mesh2D_->getextboundarycenter();
   const Matrix& CellCenter = 
     kinetic_mesh2D_->getCellCenter();
-  const std::vector<Matrix> CoorBdrRef2d = 
+  const std::vector<Matrix>& CoorBdrRef2d = 
     kinetic_fe2D_->getCoorBdrRef();
   // ******************************** //
-  std::vector<Matrix> boundary_u_rho(boundary_u_rho_temp.size());
-  Vector ones = Vector::Ones(numqua_rho);
-  for (int i = 0; i < boundary_u_rho_temp.size(); i++)
+  
+  
+  int estimatedNonZeros = ncell_g * extboundaryNum * polydim * polydim;
+  tripletList_Da.reserve(estimatedNonZeros);
+  Da->resize(NTdofs_rho, NTdofs_g);
+  Vector V_vec;
+  for (int i = 0; i < ncell_g; i++) 
   {
-    boundary_u_rho[i] = ones * boundary_u_rho_temp[i].transpose();
-  }
-  
-  // SparseMatrix da_bc(NTdofs, NTdofs); 
-  
-  int estimatedNonZeros = extboundaryNum * polydim * polydim;
-  
-  int test_cell_Index, trial_cell_Index;
+    int x_cell_index = mesh2D_->xCellIndex(i);
+    V_vec = V_nodal_.col(i);
+    Bref = test_ref2D.array().colwise() * V_vec.array();
+    Bref = test_ref1D_T_ * wqua_diag_ref * Bref;
+    for (int test_basis_index = 0; test_basis_index < polydim_rho; test_basis_index++) 
+    {
+      int alpha = Tm_rho(test_basis_index, x_cell_index);
+      for (int trial_basis_index = 0; trial_basis_index < polydim_g; trial_basis_index++) 
+      {
+        int beta = Tm_g(trial_basis_index, i);
+        real_t ini_value = - Bref(test_basis_index, trial_basis_index) * JacobiDet_g(0) * Jx(0);
+        tripletList_Da.push_back(Eigen::Triplet<real_t>(alpha, beta, ini_value));
+      };
+    };
+  };
+
   int test_basis_index, trial_basis_index;
+  int test_cell_Index, trial_cell_Index;
+  Vector test_qua_value, trial_qua_value;
+  real_t test_normal, trial_normal;
+  int alpha, beta;
+  real_t ini_value;
+  for (int i = 0; i < intboundaryNum; i++) {
+    for (int test_cell = 0; test_cell < 2; test_cell++) {
+      test_cell_Index = intNei[i](test_cell);
+      test_qua_value = boundary_u[test_cell];
+      test_normal = intnormals[i] * std::pow(-1.e0,test_cell);
+      for (int trial_cell = 0; trial_cell < 2; trial_cell++) {
+        trial_cell_Index = intNei[i](trial_cell);
+        trial_qua_value = boundary_u[trial_cell];
+        trial_normal = intnormals[i] * std::pow(-1.e0,trial_cell);
+        for (int test_basis_index = 0; test_basis_index < polydim; test_basis_index++) {
+          alpha = Tm(test_basis_index, test_cell_Index);
+          for (int trial_basis_index = 0; trial_basis_index < polydim; trial_basis_index++) {
+            beta = Tm(trial_basis_index, trial_cell_Index);
+            ini_value =  (0.5e0 * trial_qua_value(trial_basis_index) 
+                + trial_qua_value(trial_basis_index) * be * trial_normal) 
+                * test_qua_value(test_basis_index) * test_normal;
+            ini_value = - ini_value;   
+            // 这是一维代码不需要积分
+            if (std::abs(ini_value >= 1.e-14) > 1.e-14)
+            {
+              tripletList_D.push_back(Eigen::Triplet<real_t>(alpha, beta, ini_value));
+            }
+          };
+        };
+      };
+    };
+  };
+  
   Vector test_qua_value;
   Matrix trial_qua_value;
   real_t test_normal;
@@ -461,10 +531,8 @@ void KineticDD_DG2d_IMEX_IM_Schur::Da_compute(const real_t& Trun,
   // (*Da_ext)[j] = vj * Da_ + da_bc;
 };
 
-void KineticDD_DG2d_IMEX_IM_Schur::Db_ext_treat(const real_t& Trun,
-                            const real_t& dt, 
-                            const SparseMatrix& Db,
-                            SparseMatrix* Db_ext)
+void KineticDD_DG2d_IMEX_IM_Schur::Db_ext_treat(const real_t& beta,
+                                                SparseMatrix* Db_ext)
 {
   // ********* 传入相关变量 ********** //
   const int& ncell = mesh1D_->getncell();
@@ -1633,6 +1701,16 @@ Matrix KineticDD_DG2d_IMEX_IM_Schur::rho_d(const Matrix& x)
   Matrix x2 = (x.array() - 0.7) / 0.02;
   Matrix rhod = 1.0 - (1.0 - 0.001) / 2.0 * (x1.array().tanh() - x2.array().tanh());
   return rhod;
+};
+
+Matrix KineticDD_DG2d_IMEX_IM_Schur::V_value(const Matrix& x, const Matrix& v)
+{
+  return v;
+};
+
+real_t KineticDD_DG2d_IMEX_IM_Schur::V_value(const real_t& x, const real_t& v)
+{
+  return v;
 };
 
 real_t KineticDD_DG2d_IMEX_IM_Schur::source(const real_t& x, const real_t& t) 

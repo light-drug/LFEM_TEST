@@ -3,11 +3,11 @@
 /*
   ./bin/KineticDD1D_DGIMEX_Schur_acctest \
   -m 5 -nx 20 -v1 -10 -v2 10 -nv 40 \
-  -Tstop_vec "0.5e0" -basis 0 -ot 1 \
+  -Tstop_vec "0.5e0" -basis 2 -ot 3 \
   -NTH 1 -knu 1.e-6 \
   -schur 4 -schurtol 1.e-10 \
   -output 1 -plot 0 \
-  -itertol 1.e-9 -gamma 0.8 
+  -itertol 1.e-9 -gamma 0.8 -timeratio 1.0
 */
 
 int main(int argc, char *argv[])
@@ -40,6 +40,7 @@ int main(int argc, char *argv[])
   int plot = 0;
   int schur_solver_type_id = 3;
   int poi_solver_type_id = 3;
+  real_t timeratio = 0.8e0;
   real_t C11 = 1.e0;
   real_t C12 = 0.5e0;
   real_t schur_tol = 1.e-10;
@@ -86,6 +87,8 @@ int main(int argc, char *argv[])
                   "The number of threads by OPENMP.");
   args.AddOption(&m, "-m", "--max",
                   "Max computational mesh size.");
+  args.AddOption(&timeratio, "-timeratio", "timeratio",
+                  "The time ratio for the sake of stability.");
   args.AddOption(&C11, "-C11", "--C11",
                   "The penalty term in the Poisson equation.");
   args.AddOption(&C12, "-C12", "--C12",
@@ -138,8 +141,6 @@ int main(int argc, char *argv[])
     poi_solver.init(poi_solver_type, poi_tol);
     QUEST::IMEX_RK rk_table(t_order);
     rk_table.init();
-    rk_table.printall();
-    PAUSE();
     QUEST::KineticDriftD_DG_IMEX_IM_Schur_period kieDD(&mesh1D, &fe, &rk_table, 
                                 &poi_solver, schur_solver_type);
     kieDD.seteps(knu);

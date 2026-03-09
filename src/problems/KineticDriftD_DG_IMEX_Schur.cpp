@@ -49,6 +49,11 @@ void KineticDriftD_DG_IMEX_IM_Schur::setgamma(const real_t& gamma)
   gamma_ = gamma;
 };
 
+void KineticDriftD_DG_IMEX_IM_Schur::settimeratio(const real_t& timeratio)
+{
+  timeratio_ = timeratio;
+};
+
 const Matrix& KineticDriftD_DG_IMEX_IM_Schur::getrho_modal() const 
 {
   return kinetic_modal_.rho;
@@ -63,7 +68,6 @@ const Matrix& KineticDriftD_DG_IMEX_IM_Schur::getrho_d_modal() const
 {
   return rho_d_modal_;
 };
-
 
 KineticDriftD_DG_IMEX_IM_Schur::KineticDriftD_DG_IMEX_IM_Schur(const KineticTensorMesh1D* mesh1D,
                                 const fespace1D* fe,
@@ -202,7 +206,7 @@ void KineticDriftD_DG_IMEX_IM_Schur::setdt(real_t* dt)
   default:
     break;
   }
-  *dt = gamma_ * (*dt);
+  *dt = timeratio_ * gamma_ * (*dt);
 };
 
 void KineticDriftD_DG_IMEX_IM_Schur::D_compute(const real_t& be, SparseMatrix* D)
@@ -1012,13 +1016,16 @@ void KineticDriftD_DG_IMEX_IM_Schur::ch_compute(const model_data_& modal,
       g_diff_nodal.setZero();
       for (int i = 0; i < ncell; i++)
       {
-        wind = modal.E(0, i) >= 0 ? -1 : 1; 
-        if (j-wind >= 0 && j-wind < Nv) { gj_1 = &(g_nodal[j-wind]); }
-        else { gj_1 = &zero_nodal_mat_; };
-        
-        g_diff_nodal.col(i) = (g_nodal[j].col(i) - gj_1->col(i)) * hvinv * real_t(wind);
+        for (int q = 0; q < numqua; q++)
+        {
+          wind = E_nodal(q, i) >= 0 ? -1 : 1; 
+          if (j-wind >= 0 && j-wind < Nv) { gj_1 = &(g_nodal[j-wind]); }
+          else { gj_1 = &zero_nodal_mat_; };
+          
+          g_diff_nodal(q, i) = (g_nodal[j](q, i) - gj_1->coeff(q, i)) * hvinv * real_t(wind);
+        }
       }
-      g_diff_nodal = - 1.e0 * g_diff_nodal.array() * E_nodal.array();
+      g_diff_nodal = - g_diff_nodal.array() * E_nodal.array();
       fe_->Assemble_F(g_diff_nodal, 0, &((*ch)[j]));
       (*ch)[j] *= JacobiDet1;
     };
@@ -1026,23 +1033,27 @@ void KineticDriftD_DG_IMEX_IM_Schur::ch_compute(const model_data_& modal,
   }
   case 2:
   {
-    const Matrix* gj_1; const Matrix* gj_2;
+    const Matrix* gj_1; 
+    const Matrix* gj_2;
     for (int j = 0; j < Nv; j++) 
     {
       g_diff_nodal.setZero();
       for (int i = 0; i < ncell; i++)
       {
-        wind = modal.E(0, i) >= 0 ? -1 : 1;
+        for (int q = 0; q < numqua; q++)
+        {
+          wind = E_nodal(q, i) >= 0 ? -1 : 1;
 
-        if (j-wind >= 0 && j-wind < Nv) { gj_1 = &(g_nodal[j-wind]); }
-        else { gj_1 = &zero_nodal_mat_; };
-        if (j-2*wind >= 0 && j-2*wind < Nv) { gj_2 = &(g_nodal[j-2*wind]); }
-        else { gj_2 = &zero_nodal_mat_; };
+          if (j-wind >= 0 && j-wind < Nv) { gj_1 = &(g_nodal[j-wind]); }
+          else { gj_1 = &zero_nodal_mat_; };
+          if (j-2*wind >= 0 && j-2*wind < Nv) { gj_2 = &(g_nodal[j-2*wind]); }
+          else { gj_2 = &zero_nodal_mat_; };
 
-        g_diff_nodal.col(i) = (3.e0 * g_nodal[j].col(i) 
-                              - 4.e0 * gj_1->col(i)
-                              + gj_2->col(i)) * hvinv2 * real_t(wind);
-      }
+          g_diff_nodal(q, i) = (3.e0 * g_nodal[j](q, i) 
+                                - 4.e0 * gj_1->coeff(q, i)
+                                + gj_2->coeff(q, i)) * hvinv2 * real_t(wind);
+        };
+      };
       g_diff_nodal = - 1.e0 * g_diff_nodal.array() * E_nodal.array();
       fe_->Assemble_F(g_diff_nodal, 0, &((*ch)[j]));
       (*ch)[j] *= JacobiDet1;
@@ -1075,7 +1086,7 @@ void KineticDriftD_DG_IMEX_IM_Schur::ch_compute(const model_data_& modal,
           };
         };
       }
-      g_diff_nodal = - 1.e0 * g_diff_nodal.array() * E_nodal.array();
+      g_diff_nodal = - g_diff_nodal.array() * E_nodal.array();
       fe_->Assemble_F(g_diff_nodal, 0, &((*ch)[j]));
       (*ch)[j] *= JacobiDet1;
     };
@@ -1113,13 +1124,10 @@ void KineticDriftD_DG_IMEX_IM_Schur::WENO3_VelocityReconstruct(
   flux_downwind_nodal->at(Nv) = zero_nodal_mat_;
 
   Vector beta0, beta1;
-  const real_t d0 = 2.e0 / 3.e0;
-  const real_t d1 = 1.e0 / 3.e0;
-  Vector alpha0, alpha1, alpha_sum;
-  const real_t eps_weno = 1.e-6;
   const Matrix* g2;
   const Matrix* g1;
   const Matrix* g0;
+  const Matrix* gp1;
   for (int j = 1; j < Nv; j++)
   {
     flux_upwind_nodal->at(j) = zero_nodal_mat_;
@@ -1129,33 +1137,46 @@ void KineticDriftD_DG_IMEX_IM_Schur::WENO3_VelocityReconstruct(
     if (j-1 >= 0 && j-1 < Nv) { g1 = &(g_nodal[j-1]); }
     else { g1 = &zero_nodal_mat_; };
     g0 = &(g_nodal[j]);
+    if (j+1 >= 0 && j+1 < Nv) { gp1 = &(g_nodal[j+1]); }
+    else { gp1 = &zero_nodal_mat_; };
     Matrix& flux_up   = flux_upwind_nodal->at(j);
-    Matrix& flux_down = flux_downwind_nodal->at(j-1);
+    Matrix& flux_down = flux_downwind_nodal->at(j);
     for(int i = 0; i < ncell; i++)
     {
       Eigen::Ref<const Vector> g2i = g2->col(i);
       Eigen::Ref<const Vector> g1i = g1->col(i);
       Eigen::Ref<const Vector> g0i = g0->col(i);
-      beta0 = (g2i - g1i).array().square();
-      beta1 = (g1i - g0i).array().square();
-      alpha0 = (d0 / (eps_weno + beta0.array()).square()).matrix();
-      alpha1 = (d1 / (eps_weno + beta1.array()).square()).matrix();
-      alpha_sum = alpha0 + alpha1;
-      alpha0 = alpha0.array() / alpha_sum.array();
-      alpha1 = alpha1.array() / alpha_sum.array();
-      if (j == 1)
-      {
-        flux_up.col(i) = alpha0.array() * (0.5e0 * g1i.array() + 0.5e0 * g0i.array())
-                        + alpha1.array() * (- 0.5e0 * g2i.array() + 1.5e0 * g1i.array());
-      } else
-      {
-        flux_up.col(i) = alpha0.array() * (0.5e0 * g1i.array() + 0.5e0 * g0i.array())
-                        + alpha1.array() * (- 0.5e0 * g2i.array() + 1.5e0 * g1i.array());
-        flux_down.col(i) = alpha0.array() * (1.5e0 * g1i.array() - 0.5e0 * g0i.array())
-                          + alpha1.array() * (0.5e0 * g2i.array() + 0.5e0 * g1i.array());
-      };  
+      Eigen::Ref<const Vector> gp1i = gp1->col(i);
+
+      Eigen::Ref<Vector> flux_up_temp = flux_up.col(i);
+      Eigen::Ref<Vector> flux_down_temp = flux_down.col(i);
+
+      WENO3_left_biased(g2i, g1i, g0i, flux_up_temp);
+      WENO3_left_biased(gp1i, g0i, g1i, flux_down_temp);
     };
   }  
+};
+
+void KineticDriftD_DG_IMEX_IM_Schur::WENO3_left_biased(const Eigen::Ref<const Vector>& g2,
+                                                      const Eigen::Ref<const Vector>& g1,
+                                                      const Eigen::Ref<const Vector>& g0,
+                                                      Eigen::Ref<Vector> g_reconstruct)
+{
+  const real_t eps_weno = 1.e-6;
+  const real_t d0 = 1.e0 / 3.e0;
+  const real_t d1 = 2.e0 / 3.e0;
+
+  const Vector p0 = 0.5e0 * (- g2 + 3.e0 * g1);
+  const Vector p1 = 0.5e0 * (g1 + g0);
+
+  const Vector beta0 = (g2 - g1).array().square();
+  const Vector beta1 = (g1 - g0).array().square();
+
+  const Vector a0 = d0 / (eps_weno + beta0.array()).square();
+  const Vector a1 = d1 / (eps_weno + beta1.array()).square();
+  const Vector asum = a0 + a1;
+  
+  g_reconstruct = (a0.array() * p0.array() + a1.array() * p1.array()) / asum.array();
 };
 
 void KineticDriftD_DG_IMEX_IM_Schur::sourceh_compute(const model_data_& modal, 
