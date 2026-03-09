@@ -59,7 +59,8 @@ private:
 } // namespace QUEST
 
 /*
-  ./bin/Euler1D_DG_TVDRK_Riemann -nx 400 -basis 1 -problem 0 -Tstop 0.2
+  ./bin/Euler1D_DG_TVDRK_Riemann -m 1 -nx 400 -basis 1 -ot 2 \
+  -problem 1 -Tstop 1.3
 */
 int main(int argc, char* argv[])
 {
@@ -69,12 +70,15 @@ int main(int argc, char* argv[])
   real_t x1 = -5.e0;
   real_t x2 = 5.e0;
   int xDiv = 400;
-  int basis_order = 1;
+  int basis_id = 1;
   int qua_order = 4;
+  int quatype_id = 1;
   int t_order = 3;
   real_t gamma = 1.4e0;
   real_t cfl = 0.15e0;
   real_t Tstop = 0.2e0;
+  int m = 1;
+  int plot = 0;
   int outputgap = 20;
   int problem = 0; // 0: Sod, 1: Lax
 
@@ -82,77 +86,113 @@ int main(int argc, char* argv[])
   args.AddOption(&x1, "-x1", "--x1", "Left boundary of x.");
   args.AddOption(&x2, "-x2", "--x2", "Right boundary of x.");
   args.AddOption(&xDiv, "-nx", "--xDiv", "Number of cells.");
-  args.AddOption(&basis_order, "-basis", "--basis_order", "DG basis order.");
+  args.AddOption(&basis_id, "-basis", "--basis_id", "DG basis order.");
   args.AddOption(&qua_order, "-q", "--qua_order", "Quadrature order.");
+  args.AddOption(&quatype_id, "-quatype", "--quatype_id",
+                  "The quadrature order in the space direction.");
   args.AddOption(&t_order, "-ot", "--t_order", "TVD-RK order in time (1~3).");
   args.AddOption(&gamma, "-gamma", "--gamma", "Gas constant gamma.");
   args.AddOption(&cfl, "-cfl", "--cfl", "CFL number.");
   args.AddOption(&Tstop, "-Tstop", "--Tstop", "Final time.");
   args.AddOption(&outputgap, "-output", "--outputgap", "Output every outputgap time steps if >0.");
   args.AddOption(&problem, "-problem", "--problem", "0: Sod, 1: Lax.");
+  args.AddOption(&m, "-m", "--max", "Number of mesh refinements.");
+  args.AddOption(&plot, "-plot", "--plot", "the parameter for whether plot.");
   args.ParseCheck(std::cout);
 
-  QUEST::TensorMesh1D mesh1D(x1, x2, xDiv);
-  mesh1D.init();
+  IntVector xDiv_vec(m);
 
-  QUEST::BasisFunction1D basis(static_cast<QUEST::BasisType>(basis_order));
-  QUEST::fespace1D fe(&mesh1D, &basis, qua_order, QUEST::QuadratureType::GaussQuadrature, 3);
-  fe.init();
-
-  QUEST::EX_TVDRK rk_table(t_order);
-  rk_table.init();
-
-  QUEST::DGRiemannInitialCondition ic;
-  switch(problem) {
-    case 0: ic = {0.e0, 1.0, 0.125, 0.0, 0.0, 1.0, 0.1}; break;
-    case 1: ic = {0.e0, 0.445, 0.5, 0.698 / 0.445, 0.0, 3.528, 0.571}; break;
-    default: QUEST_ERROR("Unsupported Riemann problem type.");
-  }
-
-  QUEST::Euler1D_DG_TVDRK_Riemann solver(&mesh1D, &fe, &rk_table, ic);
-  solver.setgamma(gamma);
-  solver.setcfl(cfl);
-  solver.setlimiter(true, 1.5e0);
-  solver.init();
-
-  real_t Trun = 0.e0;
-  real_t dt = 0.e0;
-  int step_count = 0;
-  while (Trun < Tstop)
+  for (int i = 0; i < m; ++i)
   {
-    solver.setdt(&dt);
-    if (Trun + dt > Tstop) {
-      dt = Tstop - Trun;
-    }
-    solver.updateAll(Trun, dt);
-    Trun += dt;
-    ++step_count;
+    xDiv_vec(i) = std::pow(2, i) * xDiv;
+    QUEST::BasisType basistype = 
+            static_cast<QUEST::BasisType>(basis_id);
+    QUEST::QuadratureType quatype = 
+          static_cast<QUEST::QuadratureType>(quatype_id);
 
-    if (outputgap > 0 && step_count % outputgap == 0)
+
+    QUEST::TensorMesh1D mesh1D(x1, x2, xDiv_vec(i));
+    mesh1D.init();
+
+    QUEST::BasisFunction1D basis(basistype);
+    QUEST::fespace1D fe(&mesh1D, &basis, qua_order, quatype, 3);
+    fe.init();
+
+    QUEST::EX_TVDRK rk_table(t_order);
+    rk_table.init();
+
+    QUEST::DGRiemannInitialCondition ic;
+    switch(problem) 
     {
-      std::cout << "Trun = " << Trun << ", dt = " << dt << std::endl;
+      case 0: ic = {0.e0, 1.0, 0.125, 0.0, 0.0, 1.0, 0.1}; break;
+      case 1: ic = {0.e0, 0.445, 0.5, 0.698 / 0.445, 0.0, 3.528, 0.571}; break;
+      default: QUEST_ERROR("Unsupported Riemann problem type.");
     }
-  }
 
-  std::vector<Matrix> u_nodal;
-  fe.modal_to_nodal1D(solver.getumodal(), &u_nodal);
-  Matrix rho = u_nodal[0];
-  Matrix rhovx = u_nodal[1];
-  Matrix E = u_nodal[2];
-  Matrix vx = rhovx.array() / rho.array();
-  Matrix p = (gamma - 1.e0) * (E.array() - 0.5e0 * rhovx.array().square() / rho.array());
+    QUEST::Euler1D_DG_TVDRK_Riemann solver(&mesh1D, &fe, &rk_table, ic);
+    solver.setgamma(gamma);
+    solver.setcfl(cfl);
+    solver.setlimiter(true, 1.5e0);
+    solver.init();
 
-  std::string filename = output_dir + "/Euler1D_DG_Riemann_N" + std::to_string(xDiv)
-                                  + "_basis" + std::to_string(basis_order)
-                                  + "_problem" + std::to_string(problem) + ".dat";
-  std::ofstream outFile(filename);
-  const Matrix& x = mesh1D.getCellCenter();
-  outFile << "TITLE = \"Euler 1D DG Riemann\"\n";
-  outFile << "VARIABLES = \"X\", \"Rho\", \"Vx\", \"P\", \"E\"\n";
-  outFile << "ZONE I = " << xDiv << " F = POINT\n";
-  for (int j = 0; j < xDiv; ++j) {
-    outFile << x(0, j) << " " << rho(0, j) << " " << vx(0, j) << " " << p(0, j) << " " << E(0, j) << "\n";
-  }
+    real_t Trun = 0.e0;
+    real_t dt = 0.e0;
+    int step_count = 0;
+    while (Trun < Tstop)
+    {
+      solver.setdt(&dt);
+      if (Trun + dt > Tstop) {
+        dt = Tstop - Trun;
+      }
+      solver.updateAll(Trun, dt);
+      Trun += dt;
+      ++step_count;
+
+      if (outputgap > 0 && step_count % outputgap == 0)
+      {
+        std::cout << "Trun = " << Trun << ", dt = " << dt << std::endl;
+      }
+    }
+
+    std::vector<Matrix> u_nodal;
+    fe.modal_to_nodal1D(solver.getumodal(), &u_nodal);
+    Matrix rho = u_nodal[0];
+    Matrix rhovx = u_nodal[1];
+    Matrix E = u_nodal[2];
+    Matrix vx = rhovx.array() / rho.array();
+    Matrix p = (gamma - 1.e0) * (E.array() - 0.5e0 * rhovx.array().square() / rho.array());
+
+    Matrix rho_modal = solver.getumodal()[0];
+    Matrix rhovx_modal;
+    fe.nodal_to_modal1D(rhovx, &rhovx_modal);
+    Matrix vx_modal;
+    fe.nodal_to_modal1D(vx, &vx_modal);
+    Matrix p_modal;
+    fe.nodal_to_modal1D(p, &p_modal);
+    Matrix E_modal = solver.getumodal()[2];
+
+    
+    if (plot > 0)
+    {
+      const int& x_order = basis.getk1D();
+      const int& t_order = rk_table.gett_order();
+      std::string filename = output_dir + "/Euler1D_DG_Riemann_Nx" + std::to_string(xDiv)
+                                      + "_ox" + std::to_string(x_order)
+                                      + "_ot" + std::to_string(t_order) + ".dat";
+      std::ofstream outFile(filename);
+      const Matrix& x = mesh1D.getCellCenter();
+      outFile << "TITLE = \"Euler 1D DG Riemann\"\n";
+      outFile << "VARIABLES = \"X\", \"Rho\", \"Vx\", \"P\", \"E\"\n";
+      outFile << "ZONE I = " << xDiv << " F = POINT\n";
+      for (int j = 0; j < xDiv; ++j) {
+        outFile << x(0, j) << " " 
+                << rho_modal(0, j) << " " 
+                << vx_modal(0, j) << " " 
+                << p_modal(0, j) << " " 
+                << E_modal(0, j) << "\n";
+      }
+    };
+  };
 
   return 0;
 }

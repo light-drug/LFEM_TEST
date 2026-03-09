@@ -161,9 +161,10 @@ void Euler1D_DG_TVDRK::Lu_compute(const std::vector<Matrix>& u_modal,
   fu_compute(u_modal, &fu_nodal);
 
   std::vector<Matrix> rhs(num_equations_);
-  for (int k = 0; k < num_equations_; ++k) {
-    fe_->Assemble_F(fu_nodal[k], 1, &rhs[k]);
-  }
+  fe_->Assemble_F(fu_nodal, 1, &rhs);
+  // for (int k = 0; k < num_equations_; ++k) {
+  //   fe_->Assemble_F(fu_nodal[k], 1, &rhs[k]);
+  // }
 
   std::vector<Matrix> dirichlet(num_equations_, Matrix::Zero(1, 2));
   const real_t xL = mesh1D_->getx1();
@@ -185,13 +186,10 @@ void Euler1D_DG_TVDRK::Lu_compute(const std::vector<Matrix>& u_modal,
 
   const DiagnalMatrix& Minv = fe_->getv_u_diaginv();
   Lu->resize(num_equations_);
-  for (int k = 0; k < num_equations_; ++k) {
-    // NOTE:
-    // Assemble_F(test_dx_order=1) and Assemble_Flux already contain the
-    // geometric 1/hx scaling from physical mapping, but they do NOT apply
-    // the modal mass inverse. Therefore Lu must multiply M^{-1} explicitly.
-    (*Lu)[k] = Minv * (-rhs[k] + flux_rhs[k]);
-  }
+  // for (int k = 0; k < num_equations_; ++k) {
+  //   (*Lu)[k] = Minv * (-rhs[k] + flux_rhs[k]);
+  // }
+  *Lu = Minv * (rhs - flux_rhs);
 };
 
 void Euler1D_DG_TVDRK::numerical_flux(const Vector& u_L,
@@ -234,16 +232,18 @@ void Euler1D_DG_TVDRK::fluxint_compute(const std::vector<Matrix>& u_modal,
   {
     const int cL = IntBNei[i](0);
     const int cR = IntBNei[i](1);
+    // std::cout << " normal = " << IntBNormal[i] << std::endl;
     Vector uL(num_equations_), uR(num_equations_), flux_face;
     for (int k = 0; k < num_equations_; ++k) {
-      uL(k) = u_modal[k].col(cL).dot(boundary_u[1]);
-      uR(k) = u_modal[k].col(cR).dot(boundary_u[0]);
+      uL(k) = u_modal[k].col(cL).dot(boundary_u[0]);
+      uR(k) = u_modal[k].col(cR).dot(boundary_u[1]);
     }
     numerical_flux(uL, uR, IntBNormal[i], max_speed, &flux_face);
     for (int k = 0; k < num_equations_; ++k) {
       (*flux_int)[k](0, i) = flux_face(k);
     }
   }
+  // PAUSE();
 }
 
 void Euler1D_DG_TVDRK::fluxext_compute(const std::vector<Matrix>& u_modal,
@@ -262,14 +262,15 @@ void Euler1D_DG_TVDRK::fluxext_compute(const std::vector<Matrix>& u_modal,
   {
     const int cell = ExtBNei[i];
     const int side = 1 - i;
+    const real_t normal = ExtBNormal[i];
     Vector u_in(num_equations_), u_bc(num_equations_), flux_face;
     for (int k = 0; k < num_equations_; ++k) {
       u_in(k) = u_modal[k].col(cell).dot(boundary_u[side]);
       u_bc(k) = Dirichlet[k](0, i);
     }
-    numerical_flux(u_in, u_bc, ExtBNormal[i], max_speed, &flux_face);
+    numerical_flux(u_in, u_bc, normal, max_speed, &flux_face);
     for (int k = 0; k < num_equations_; ++k) {
-      (*flux_ext)[k](0, i) = flux_face(k);
+      (*flux_ext)[k](0, i) = flux_face(k) * normal;
     }
   }
 }
@@ -376,6 +377,36 @@ Euler1D_DG_TVDRK_period::Euler1D_DG_TVDRK_period(const TensorMesh1D* mesh1D,
                                                 const EX_TVDRK* rk_table)
   : Euler1D_DG_TVDRK(mesh1D, fe, rk_table) {};
 
+void Euler1D_DG_TVDRK_period::Lu_compute(const std::vector<Matrix>& u_modal,
+                                  const real_t& Trun,
+                                  const real_t& dt,
+                                  std::vector<Matrix>* Lu)
+{
+  std::vector<Matrix> fu_nodal;
+  fu_compute(u_modal, &fu_nodal);
+
+  std::vector<Matrix> rhs(num_equations_);
+  fe_->Assemble_F(fu_nodal, 1, &rhs);
+  // for (int k = 0; k < num_equations_; ++k) {
+  //   fe_->Assemble_F(fu_nodal[k], 1, &rhs[k]);
+  // }
+
+  std::vector<Matrix> dirichlet(num_equations_, Matrix::Zero(1, 2));
+
+  fluxint_compute(u_modal, &flux_int_);
+  fluxext_compute(u_modal, dirichlet, &flux_ext_);
+
+  std::vector<Matrix> flux_rhs;
+  fe_->Assemble_Flux(flux_int_, flux_ext_, &flux_rhs);
+
+  const DiagnalMatrix& Minv = fe_->getv_u_diaginv();
+  Lu->resize(num_equations_);
+  // for (int k = 0; k < num_equations_; ++k) {
+  //   (*Lu)[k] = Minv * (-rhs[k] + flux_rhs[k]);
+  // }
+  *Lu = Minv * (rhs - flux_rhs);
+};
+
 void Euler1D_DG_TVDRK_period::fluxext_compute(const std::vector<Matrix>& u_modal,
                                               const std::vector<Matrix>& Dirichlet,
                                               std::vector<Matrix>* flux_ext)
@@ -388,21 +419,18 @@ void Euler1D_DG_TVDRK_period::fluxext_compute(const std::vector<Matrix>& u_modal
   const real_t max_speed = max_speed_compute(u_modal);
   flux_ext->assign(num_equations_, Matrix::Zero(1, 2));
 
-  for (int i = 0; i < 2; ++i)
-  {
-    const int cIn = PNei[i](0);
-    const int cOut = PNei[i](1);
-    const int inSide = 1 - i;
-    const int outSide = i;
-    Vector u_in(num_equations_), u_out(num_equations_), flux_face;
-    for (int k = 0; k < num_equations_; ++k) {
-      u_in(k) = u_modal[k].col(cIn).dot(boundary_u[inSide]);
-      u_out(k) = u_modal[k].col(cOut).dot(boundary_u[outSide]);
-    }
-    numerical_flux(u_in, u_out, ExtBNormal[i], max_speed, &flux_face);
-    for (int k = 0; k < num_equations_; ++k) {
-      (*flux_ext)[k](0, i) = flux_face(k);
-    }
+  const int cIn = PNei[0](0);
+  const int cOut = PNei[0](1);
+  const real_t normal = ExtBNormal[0];
+  Vector u_in(num_equations_), u_out(num_equations_), flux_face;
+  for (int k = 0; k < num_equations_; ++k) {
+    u_in(k) = u_modal[k].col(cIn).dot(boundary_u[1]);
+    u_out(k) = u_modal[k].col(cOut).dot(boundary_u[0]);
+  }
+  numerical_flux(u_in, u_out, ExtBNormal[0], max_speed, &flux_face);
+  for (int k = 0; k < num_equations_; ++k) {
+    (*flux_ext)[k](0, 0) = flux_face(k) * normal;
+    (*flux_ext)[k](0, 1) = flux_face(k) * normal;
   }
 }
 

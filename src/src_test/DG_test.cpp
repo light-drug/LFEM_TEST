@@ -1736,7 +1736,7 @@ void KineticLinearDiffusion1D_DGIMEX_Schur_withMaxwell_acctest(int& argc, char *
   args.AddOption(&basis_id, "-basis", "--basis_id",
                   "The order in the space direction.");
   args.AddOption(&quatype_id, "-quatype", "--quatype_id",
-                  "The order in the space direction.");  
+                  "The quadrature order in the space direction.");  
   args.AddOption(&t_order, "-ot", "--t_order",
                   "The order in the time direction.");
   args.AddOption(&knu, "-knu", "--Knudsen",

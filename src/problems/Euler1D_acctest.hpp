@@ -81,6 +81,10 @@ public:
                           const EX_TVDRK* rk_table);
   ~Euler1D_DG_TVDRK_period() override = default;
 
+   void Lu_compute(const std::vector<Matrix>& u_modal,
+                  const real_t& Trun, 
+                  const real_t& dt,
+                  std::vector<Matrix>* Lu) override;
   void fluxext_compute(const std::vector<Matrix>& u_modal,
                       const std::vector<Matrix>& Dirichlet,
                       std::vector<Matrix>* flux_ext) override;
