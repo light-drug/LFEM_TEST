@@ -576,7 +576,12 @@ void KineticDriftD_DG_IMEX_IM_Schur::Eh_compute(const Matrix& E_modal, SparseMat
   int alpha, beta;
   for (int i = 0; i < ncell; i++) {
     int alpha_start = i * polydim;
-    local_ME = test_ref.array().rowwise() * E_nodal.col(i).transpose().array() * JacobiDet(i);
+    local_ME = test_ref.array().rowwise() * E_nodal.col(i).transpose().array();
+    std::cout << " test_ref = " << test_ref << std::endl;
+    std::cout << " E_nodal.col = " << E_nodal.col(i) << std::endl;
+    std::cout << " result = " << local_ME << std::endl;
+    local_ME *= JacobiDet(i);
+    PAUSE();
     local_ME = local_ME * wqua_diag * test_ref_T;
     for (int trial_basis_index = 0; trial_basis_index < polydim; trial_basis_index++) 
     {
@@ -1412,6 +1417,8 @@ void KineticDriftD_DG_IMEX_IM_Schur::SolveRho_DichletBoundary(const real_t& Trun
   Vector b0_hat = Vector::Zero(NTdofs);
   real_t vj, Mj;
   SparseMatrix Coef = a * dt * Minv_ * parainv;
+  SparseMatrix H_temp;
+
   for (int j = 0; j < Nv; j++)
   {
     vj = V(j);
@@ -1423,11 +1430,11 @@ void KineticDriftD_DG_IMEX_IM_Schur::SolveRho_DichletBoundary(const real_t& Trun
   };
   
   Eigen::Map<Vector> rho_old_vector(b0_bc.data(), NTdofs);
-  Vector b0 = rho_old_vector - b0_hat; // Schur补的右端项
+  Vector b0_temp = rho_old_vector - b0_hat; // Schur补的右端项
   real_t ppp = dt * a * dt * a * parainv;
-  H_ = M_ + (a * dt) * Mbc_ + ppp * temp_;
+  H_temp = M_ + (a * dt) * Mbc_ + ppp * temp_;
 
-  H_ += 0.5e0 / gamma_ * M_;
+  H_temp += 0.5e0 / gamma_ * M_;
  
   int iter = 0;
   real_t rho_error = 10;
@@ -1437,20 +1444,21 @@ void KineticDriftD_DG_IMEX_IM_Schur::SolveRho_DichletBoundary(const real_t& Trun
   Eigen::Map<const Vector> rho_prev_vec(rho_prev.data(), NTdofs);
   fe_->modal_to_nodal1D(rho_prev, &rho_prev_nodal);
   Vector rhotemp;
+  Vector b0;
   phi_Dirichlet(0, 0) = phi_bc(x1, Trun);
   phi_Dirichlet(0, 1) = phi_bc(x2, Trun);
   while (rho_error > iter_tol_)
   {
     Eh_compute(modal->E, &ME_);
     Coef = Minv_ * ME_;
-    H_ -= ppp * Da_ * Coef;
+    H_ = H_temp - ppp * Da_ * Coef;
     for (int j = 0; j < Nv; j++)
     { 
       vj = V(j);
       Mj = Maxwell(vj);
       H_ -= (ppp * vweights(j) * Mj / theta_) * Da_ext_[j] * vj * Coef;
     }
-    b0 += 0.5e0 / gamma_ * M_ * rho_prev_vec;
+    b0 = b0_temp + 0.5e0 / gamma_ * M_ * rho_prev_vec;
     switch (schur_solver_type_)
     {
     case Solver1DType::LU:

@@ -44,9 +44,10 @@ protected:
   int stages_;
   real_t Maxwell_sum_;
 
-  SparseMatrix M_;
+  SparseMatrix M_rho_;
   SparseMatrix Mbc_;
-  SparseMatrix Minv_;
+  SparseMatrix M_g_inv_;
+  SparseMatrix M_g_;
   SparseMatrix Da_;
   SparseMatrix Db_;
   SparseMatrix ME_;
@@ -77,13 +78,14 @@ protected:
   };
 
   Matrix V_nodal_;
+  Matrix Maxwell_nodal_;
   Matrix rho_d_modal_;
   Matrix rho_d_nodal_;
   model_data_ kinetic_modal_;
   std::vector<model_data_> kinetic_modal_stages_;
   std::vector<Matrix> ah_;
-  std::vector<std::vector<Matrix>> ch_;
-  std::vector<std::vector<Matrix>> bh_;
+  std::vector<Matrix> ch_;
+  std::vector<Matrix> bh_;
   std::vector<Matrix> dh_;
   std::vector<Matrix> mh_;
   std::vector<Matrix> sh_;
@@ -95,7 +97,7 @@ protected:
   std::vector<std::vector<Matrix>> mixedflux_u_v_;
   std::vector<Matrix> boundary_u_rho_;
   Matrix test_ref1D_, test_ref1D_T_;
-  Matrix test_ref1D_dx_;
+  Matrix test_ref1D_dx_, test_ref1D_dx_T_;
 
 public:
   KineticDD_DG2d_IMEX_IM_Schur(const TensorMesh1D* mesh1D,
@@ -121,21 +123,21 @@ public:
   virtual const Matrix& getg_modal() const;
   virtual const Matrix& getrho_d_modal() const;
 
-  virtual void D_compute(const real_t& be, SparseMatrix* D);
   virtual void Da_compute(const real_t& be, SparseMatrix* Da);
   virtual void Db_compute(const real_t& be, SparseMatrix* Db);
 
-  virtual void M_compute(SparseMatrix* M);
+  virtual void Mrho_compute(SparseMatrix* M);
+  virtual void Mg_compute(SparseMatrix* M);
   virtual void Mbc_compute(SparseMatrix* Mbc);
-  virtual void Minv_compute(SparseMatrix* Minv);
+  virtual void Mginv_compute(SparseMatrix* Minv);
   virtual void Eh_compute(const Matrix& E_modal, SparseMatrix* ME);
   
-  // virtual void FourierMatrix(const real_t& xita, std::string& OutfilePath);
-  // virtual void FourierDMatrix_compute(const real_t& be, const real_t& xita, cMatrix* D);
-  // virtual void FourierUMatrix_compute(const cMatrix& D_NegativeWind,
-  //                                     const cMatrix& D_PositiveWind,
-  //                                     const real_t& xita, 
-  //                                     cMatrix* U);
+  virtual void FourierMatrix(const real_t& xita, std::string& OutfilePath);
+  virtual void FourierDMatrix_compute(const real_t& be, const real_t& xita, cMatrix* D);
+  virtual void FourierUMatrix_compute(const cMatrix& D_NegativeWind,
+                                      const cMatrix& D_PositiveWind,
+                                      const real_t& xita, 
+                                      cMatrix* U);
 
   virtual void fluxint_upwind_compute(const Matrix& modal, 
                           const real_t& a,
@@ -145,14 +147,14 @@ public:
                           const Matrix& Dirichlet,
                           Matrix* flux_ext);
 
-  virtual void ah_compute(const model_data_& modal, 
-                          const real_t& Trun, 
-                          const Matrix& ah_bc,
+  virtual void ah_compute(const model_data_& modal,
                           Matrix* ah);
-  virtual void ah_bc_compute(const Matrix& rho, 
-                          const std::vector<Matrix>& g,
-                          const real_t& Trun, 
-                          Matrix* ah_bc);
+  virtual void ah_bc_compute(const model_data_& modal,
+                            Matrix* ah_bc);
+  virtual void ah_bc_inflow_compute(const model_data_& modal,
+                                    const real_t& Trun,
+                                    Matrix* ah_bc_inflow);
+                                    
   virtual void SolveRho_DichletBoundary(const real_t& Trun,
                                         const real_t& dt,
                                         const real_t& a,
@@ -164,7 +166,7 @@ public:
   virtual void bh_compute(const model_data_& modal, 
                           const real_t& Trun,
                           const std::vector<Matrix>& boundary_flux,
-                          std::vector<Matrix>* bh);
+                          Matrix* bh);
   virtual void bh_extflux_compute(const model_data_& modal, 
                           const real_t& Trun,
                           std::vector<Matrix>* boundary_flux);
@@ -195,7 +197,7 @@ public:
                           Matrix* source_sumh,
                           std::vector<Matrix>* sourceh);
   virtual void MixedFlux_compute();
-
+  virtual Vector vector_nodal1Dto2D(const Eigen::Ref<const Vector>& vec);
 
   virtual Matrix rho_init(const Matrix& x);
   virtual real_t rho_init(const real_t& x);
@@ -212,16 +214,7 @@ public:
   virtual Matrix V_value(const Matrix& x, const Matrix& v);
   virtual real_t V_value(const real_t& x, const real_t& v);
 
-  virtual real_t fL_bc(const int& j, const real_t& t,
-                      const model_data_& modal);
-  virtual real_t fR_bc(const int& j, const real_t& t,
-                      const model_data_& modal);
-  virtual real_t fL_bc(const int& j, const real_t& t,
-                      const Matrix& rho, const std::vector<Matrix>& g);
-  virtual real_t fR_bc(const int& j, const real_t& t,
-                      const Matrix& rho, const std::vector<Matrix>& g);
-  virtual real_t fL_explicit_bc(const int& j, const real_t& t);
-  virtual real_t fR_explicit_bc(const int& j, const real_t& t);
+  virtual real_t fin_bc(const real_t& x, const real_t& v, const real_t& t);
   virtual real_t gL_bc(const int& j, const real_t& t,
                       const model_data_& modal, const real_t& rho_L);
   virtual real_t gR_bc(const int& j, const real_t& t,
