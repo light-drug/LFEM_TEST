@@ -325,6 +325,74 @@ protected:
   
 };
 
+class FDmesh2D
+{
+public:
+  FDmesh2D(const real_t& x1, const real_t& x2,
+          const real_t& y1, const real_t& y2,
+        const int& xDiv, const int& yDiv);
+  virtual ~FDmesh2D() = default;
+  virtual void init();
+
+  virtual const real_t& getx1() const;
+  virtual const real_t& getx2() const;
+  virtual const int& getxDiv() const;
+  virtual const real_t& gety1() const;
+  virtual const real_t& gety2() const;
+  virtual const int& getyDiv() const;
+  virtual const real_t& gethx() const;
+  virtual const real_t& gethy() const;
+  virtual const int& getNx() const;
+  virtual const int& getNy() const;
+  virtual const Vector& getxpoints() const;
+  virtual const Vector& getypoints() const;
+  virtual const Vector& getX() const;
+  virtual const Vector& getY() const;
+  virtual const Vector& getCellCenter_xvec() const;
+  virtual const Vector& getCellCenter_yvec() const;
+  virtual const std::vector<Matrix>& getCellCenter() const;
+
+  virtual void DisplayResult_withXY(const std::vector<Matrix>& Coordinate,
+                    const Matrix& numerical, const Matrix& exact,  
+                    const std::string& title, std::ostream& Outfile) const;
+  virtual void DisplayResult(const Matrix& numerical, const Matrix& exact,  
+                    const std::string& title, std::ostream& Outfile) const;
+  virtual void DisplayResult_ex(const Matrix& numerical,  
+                    const std::string& title, std::ostream& Outfile) const;
+
+  virtual void computerrorL1(const Matrix& numerical, const Matrix& exact, 
+                          real_t* error);
+  virtual void computerrorL2(const Matrix& numerical, const Matrix& exact, 
+                          real_t* error);
+  virtual void computerrorLinf(const Matrix& numerical, const Matrix& exact, 
+                          real_t* error);
+
+protected:
+  const real_t& x1_;
+  const real_t& x2_;
+  const int& xDiv_;
+  const real_t& y1_;
+  const real_t& x2_;
+  const int& xDiv_;
+
+  real_t hx_;
+  real_t hy_;
+  int Nx_; // X_点个数
+  int Ny_; // Y_点个数
+  Vector xpoints_; // x方向点(包括边界)
+  Vector ypoints_; // y方向点(包括边界)
+  Vector X_; // x方向点(不包括边界)
+  Vector Y_; // y方向点(不包括边界)
+
+  std::vector<Matrix> CellCenter_;
+  Vector CellCenter_xvec_;
+  Vector CellCenter_yvec_;
+
+  virtual void generatehxhy();
+  virtual void generatexypoints();
+  virtual void generateCellCenter();
+};
+
 } // namespace QUEST
 
 #endif // QUEST_FDMESH_HPP

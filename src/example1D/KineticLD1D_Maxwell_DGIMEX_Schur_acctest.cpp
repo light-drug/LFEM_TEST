@@ -3,13 +3,13 @@
 /*
   ./bin/KineticLD1D_Maxwell_DGIMEX_Schur_acctest \
   -m 4 -nx 20 -v1 -10 -v2 10 -nv 40 \
-  -Tstop_vec "0.1e0" -basis 2 -ot 3 \
+  -Tstop_vec "0.4e0" -basis 2 -ot 3 \
   -NTH 10 -knu 1.e-6 -schur 4 -schurtol 1.e-12 \
   -output 100 -plot 0
 
   ./bin/KineticLD1D_Maxwell_DGIMEX_Schur_acctest \
   -m 4 -nx 20 -v1 -10 -v2 10 -nv 40 \
-  -Tstop_vec "0.1e0" -basis 2 -ot 3 \
+  -Tstop_vec "0.4e0" -basis 2 -ot 3 \
   -NTH 10 -knu 1.e0 -schur 4 -schurtol 1.e-12 \
   -output 100 -plot 0
 */
