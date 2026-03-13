@@ -2269,145 +2269,51 @@ void KineticDriftD_DG_IMEX_IM_Schur_period::bh_extflux_compute(const model_data_
 
 void KineticDriftD_DG_IMEX_IM_Schur_period::FourierMatrix(const real_t& xita, std::string& OutfilePath)
 {
+  // ********* 传入相关变量 ********** //
+  const Matrix& v_u = fe_->getv_u();
+  const Matrix& dv_u = fe_->getdv_u();
+  const Vector& JacobiDet = fe_->getmesh1D()->getJacobiDet();
+  // ******************************** //
+
   cMatrix D_NegativeWind, D_PositiveWind, U;
   FourierDMatrix_compute(0.5e0, xita, &D_PositiveWind);
   D_PositiveWind = - D_PositiveWind;
   FourierDMatrix_compute(- 0.5e0, xita, &D_NegativeWind);
   D_NegativeWind = - D_NegativeWind;
   FourierUMatrix_compute(D_NegativeWind, D_PositiveWind, xita, &U);
+
+  Matrix M_fourier = v_u * JacobiDet(0);
 };
 
 void KineticDriftD_DG_IMEX_IM_Schur_period::FourierDMatrix_compute(const real_t& be, const real_t& xita, cMatrix* D) 
 {
   // ********* 传入相关变量 ********** //
-  const int& ncell = mesh1D_->getncell();
   const int& polydim = fe_->getbasis()->getpolydim();
-  const int& NTdofs = fe_->getNTdofs();
-  const DiagnalMatrix& wqua_diag = fe_->getwqua_diag();
   const Matrix& dv_u = fe_->getdv_u();
-  const Matrix& v_u = fe_->getv_u();
-  const Vector& JacobiDet = fe_->getmesh1D()->getJacobiDet();
-  const Vector& Jx = fe_->getmesh1D()->getJx();
   const std::vector<Vector>& boundary_u = fe_->getboundary_u();
-  const IntMatrix& Tm = fe_->getTm();
-  const std::vector<real_t>& intnormals = 
-    fe_->getmesh1D()->getintboundarynormal();
-  const std::vector<Eigen::Vector2i>& intNei = 
-    fe_->getmesh1D()->getintboundaryneighbors();
-  const int& intboundaryNum = 
-    fe_->getmesh1D()->getintboundaryNum();
-  const std::vector<real_t>& extnormals = 
-    fe_->getmesh1D()->getextboundarynormal();
-  const std::vector<Eigen::Vector2i>& extNei_period =
-    fe_->getmesh1D()->getextboundaryneighbors_period();
-  const int& extboundaryNum =
-    fe_->getmesh1D()->getextboundaryNum();
   // ******************************** //
-  // D->resize(NTdofs, NTdofs);
-  // int estimatedNonZeros = ncell * polydim * polydim + 
-  //         (intboundaryNum + 1) * polydim * polydim * 4;
-  // std::vector<Eigen::Triplet<creal_t>> tripletList_D;
-  // tripletList_D.reserve(estimatedNonZeros);
+  D->resize(polydim, polydim);
   
-  // Matrix Bref;
-  // Bref = dv_u;
-  // for (int i = 0; i < ncell; i++) {
-  //   int alpha_start = i * polydim;
-  //   for (int test_basis_index = 0; test_basis_index < polydim; test_basis_index++) {
-  //     for (int trial_basis_index = 0; trial_basis_index < polydim; trial_basis_index++) {
-  //       real_t ini_value = Bref(test_basis_index, trial_basis_index) * JacobiDet(i) * Jx(i);
-  //       tripletList_D.push_back(Eigen::Triplet<real_t>(alpha_start + test_basis_index, 
-  //                       alpha_start + trial_basis_index, creal_t(ini_value, 0.e0)));
-  //     };
-  //   };
-  // };
-
-  // int test_cell_Index, trial_cell_Index;
-  // Vector test_qua_value, trial_qua_value;
-  // real_t test_normal, trial_normal;
-  // int alpha, beta;
-  // real_t ini_value_temp;
-  // creal_t ini_value;
-  // for (int i = 0; i < intboundaryNum; i++) {
-  //   for (int test_cell = 0; test_cell < 2; test_cell++) {
-  //     test_cell_Index = intNei[i](test_cell);
-  //     test_qua_value = boundary_u[test_cell];
-  //     test_normal = intnormals[i] * std::pow(-1.e0,test_cell);
-  //     for (int trial_cell = 0; trial_cell < 2; trial_cell++) {
-  //       trial_cell_Index = intNei[i](trial_cell);
-  //       trial_qua_value = boundary_u[trial_cell];
-  //       trial_normal = intnormals[i] * std::pow(-1.e0,trial_cell);
-  //       for (int test_basis_index = 0; test_basis_index < polydim; test_basis_index++) {
-  //         alpha = Tm(test_basis_index, test_cell_Index);
-  //         for (int trial_basis_index = 0; trial_basis_index < polydim; trial_basis_index++) {
-  //           beta = Tm(trial_basis_index, trial_cell_Index);
-  //           ini_value_temp =  (0.5e0 * trial_qua_value(trial_basis_index) 
-  //               + trial_qua_value(trial_basis_index) * be * trial_normal) 
-  //               * test_qua_value(test_basis_index) * test_normal;
-  //           ini_value = - ini_value_temp * std::exp(creal_t(0.e0, real_t(trial_cell_Index - test_cell_Index) * xita));   
-  //           // 这是一维代码不需要积分
-  //           tripletList_D.push_back(Eigen::Triplet<real_t>(alpha, beta, ini_value));
-  //         };
-  //       };
-  //     };
-  //   };
-  // };
-
-  // for (int test_cell = 0; test_cell < 2; test_cell++) {
-  //   test_cell_Index = extNei_period[0](test_cell);
-  //   test_qua_value = boundary_u[1 - test_cell];
-  //   test_normal = extnormals[0] * std::pow(-1.e0,test_cell);
-  //   for (int trial_cell = 0; trial_cell < 2; trial_cell++) {
-  //     trial_cell_Index = extNei_period[0](trial_cell);
-  //     trial_qua_value = boundary_u[1 - trial_cell];
-  //     trial_normal = extnormals[0] * std::pow(-1.e0,trial_cell);
-  //     for (int test_basis_index = 0; test_basis_index < polydim; test_basis_index++) {
-  //       alpha = Tm(test_basis_index, test_cell_Index);
-  //       for (int trial_basis_index = 0; trial_basis_index < polydim; trial_basis_index++) {
-  //         beta = Tm(trial_basis_index, trial_cell_Index);
-  //         ini_value =  (0.5e0 * trial_qua_value(trial_basis_index) 
-  //             + trial_qua_value(trial_basis_index) * be * trial_normal) 
-  //             * test_qua_value(test_basis_index) * test_normal;
-  //         ini_value = - ini_value_temp * std::exp(creal_t(0.e0, real_t(trial_cell_Index - test_cell_Index) * xita));   
-  //         tripletList_D.push_back(Eigen::Triplet<creal_t>(alpha, beta, ini_value));
-  //       };
-  //     };
-  //   };
-  // };
-  
-  // D->setFromTriplets(tripletList_D.begin(), tripletList_D.end());
-
-  // Matrix Bref;
-  // Bref = dv_u;
-  
-  // int test_cell_Index, trial_cell_Index;
-  // Vector test_qua_value, trial_qua_value;
-  // real_t test_normal, trial_normal;
-  // int alpha, beta;
-  // real_t ini_value_temp;
-  // creal_t ini_value;
-  // for (int test_cell = 0; test_cell < 2; test_cell++) {
-  //   test_cell_Index = test_cell;
-  //   test_qua_value = boundary_u[1 - test_cell];
-  //   test_normal = extnormals[0] * std::pow(- 1.e0, test_cell);
-  //   for (int trial_cell = 0; trial_cell < 2; trial_cell++) {
-  //     trial_cell_Index = trial_cell;
-  //     trial_qua_value = boundary_u[1 - trial_cell];
-  //     trial_normal = extnormals[0] * std::pow(- 1.e0,trial_cell);
-  //     for (int test_basis_index = 0; test_basis_index < polydim; test_basis_index++) {
-  //       alpha = test_cell_Index;
-  //       for (int trial_basis_index = 0; trial_basis_index < polydim; trial_basis_index++) {
-  //         beta = trial_cell_Index;
-  //         ini_value =  (0.5e0 * trial_qua_value(trial_basis_index) 
-  //             + trial_qua_value(trial_basis_index) * be * trial_normal) 
-  //             * test_qua_value(test_basis_index) * test_normal;
-  //         ini_value = - ini_value_temp * std::exp(creal_t(0.e0, real_t(trial_cell_Index - test_cell_Index) * xita));   
-  //         tripletList_D.push_back(Eigen::Triplet<creal_t>(alpha, beta, ini_value));
-  //       };
-  //     };
-  //   };
-  // };
-
+  *D = - dv_u;
+  creal_t ini_value;
+  for (int test_basis_index = 0; test_basis_index < polydim; test_basis_index++) 
+  {
+    for (int trial_basis_index = 0; trial_basis_index < polydim; trial_basis_index++) 
+    {
+      ini_value = (0.5e0 + be) * boundary_u[0](trial_basis_index) 
+                  * boundary_u[1](test_basis_index) 
+                  * std::exp(creal_t(0.e0, -1.e0 * xita))
+                + (0.5e0 - be) * boundary_u[1](trial_basis_index) 
+                  * boundary_u[1](test_basis_index)
+                - (0.5e0 + be) * boundary_u[0](trial_basis_index) 
+                  * boundary_u[0](test_basis_index)
+                - (0.5e0 - be) * boundary_u[1](trial_basis_index) 
+                  * boundary_u[0](test_basis_index) 
+                  * std::exp(creal_t(0.e0, xita));
+      ini_value = - ini_value;
+      (*D)(test_basis_index, trial_basis_index) += ini_value;
+    };
+  };
 };
 
 void KineticDriftD_DG_IMEX_IM_Schur_period::FourierUMatrix_compute(
@@ -2420,9 +2326,7 @@ void KineticDriftD_DG_IMEX_IM_Schur_period::FourierUMatrix_compute(
   const int& Nv = mesh1D_->getNv();
   const Vector& V = mesh1D_->getV();
   const Vector& vweights = mesh1D_->getvweights();
-  const int& ncell = mesh1D_->getncell();
   const int& polydim = fe_->getbasis()->getpolydim();
-  const int& NTdofs = fe_->getNTdofs();
   const DiagnalMatrix& wqua_diag = fe_->getwqua_diag();
   const Matrix& dv_u = fe_->getdv_u();
   const Matrix& v_u = fe_->getv_u();
@@ -2430,68 +2334,40 @@ void KineticDriftD_DG_IMEX_IM_Schur_period::FourierUMatrix_compute(
   const Vector& Jx = fe_->getmesh1D()->getJx();
   const std::vector<Vector>& boundary_u = fe_->getboundary_u();
   const IntMatrix& Tm = fe_->getTm();
-  const std::vector<real_t>& intnormals = 
-    fe_->getmesh1D()->getintboundarynormal();
-  const std::vector<Eigen::Vector2i>& intNei = 
-    fe_->getmesh1D()->getintboundaryneighbors();
-  const int& intboundaryNum = 
-    fe_->getmesh1D()->getintboundaryNum();
-  const std::vector<real_t>& extnormals = 
-    fe_->getmesh1D()->getextboundarynormal();
-  const std::vector<Eigen::Vector2i>& extNei_period =
-    fe_->getmesh1D()->getextboundaryneighbors_period();
-  const int& extboundaryNum =
-    fe_->getmesh1D()->getextboundaryNum();
   // ******************************** //
-  // U->resize(Nv * NTdofs, Nv * NTdofs);
-  // int estimatedNonZeros = ncell * polydim * polydim + 
-  //         (intboundaryNum + 1) * polydim * polydim * 4;
-  // std::vector<Eigen::Triplet<creal_t>> tripletList_U;
-  // tripletList_U.reserve(estimatedNonZeros * Nv * Nv);
+  U->resize(Nv * polydim, Nv * polydim);
+  U->setZero();
+  real_t test_v, trial_v;
+  real_t Mv;
+  for (int test_i = 0; test_i < Nv; test_i++)
+  {
+    test_v = V(test_i);
+    Mv = Maxwell(test_v);
+    for (int trial_i = 0; trial_i < Nv; trial_i++)
+    {
+      trial_v = V(trial_i);
+      
+      for (int test_basis_index = 0; test_basis_index < polydim; test_basis_index++)
+      {
+        for (int trial_basis_index = 0; trial_basis_index < polydim; trial_basis_index++)
+        {
+          int alpha = test_i * polydim + test_basis_index;
+          int beta = trial_i * polydim + trial_basis_index;
 
-  // real_t vtest, vtrial;
-  // real_t Mtest, Mtrial;
-  // creal_t ini_value;
-  // cSparseMatrix* D_point;
-  // for (int test_val = 0; test_val < Nv; test_val++)
-  // {
-  //   for (int trial_val = 0; trial_val < Nv; trial_val++)
-  //   {
-  //     vtest = V(test_val); 
-  //     vtrial = V(trial_val);
-  //     Mtest = Maxwell(vtest);
-  //     Mtrial = Maxwell(vtrial);
-  //     if (vtrial > 0)
-  //     {
-  //       D_point = &D_PositiveWind;
-  //     } else if (vtrial < 0)
-  //     {
-  //       D_point = &D_NegativeWind;
-  //     }
-  //     if (test_val == trial_val)
-  //     {
-  //       for (int k = 0; k < D_point->outerSize(); ++k) 
-  //       {
-  //         for (cSparseMatrix::InnerIterator it(&D_point, k); it; ++it) {
-  //           alpha = test_val * Nv + it.row();
-  //           beta = trial_val * Nv + it.col();
-  //           ini_value = (vtest - vweights(trial_val) * vtrial * Mtest) * it.value();
-  //           tripletList_U.push_back(Eigen::Triplet<creal_t>(alpha, beta, ini_value));
-  //         }
-  //       }
-  //     }
-  //     for (int k = 0; k < D_point->outerSize(); ++k) 
-  //     {
-  //       for (cSparseMatrix::InnerIterator it(&D_point, k); it; ++it) {
-  //         alpha = test_val * Nv + it.row();
-  //         beta = trial_val * Nv + it.col();
-  //         ini_value = - vweights(trial_val) * vtrial * Mtest * it.value()
-  //         tripletList_U.push_back(Eigen::Triplet<creal_t>(alpha, beta, ini_value));
-  //       }
-  //     }
-  //   }
-  // }
-  // U->setFromTriplets(tripletList_U.begin(), tripletList_U.end());
+          if(test_i == trial_i)
+          {
+            (*U)(alpha, beta) = (test_v <= 0) ? 
+                test_v * D_NegativeWind(test_basis_index, trial_basis_index) :
+                test_v * D_PositiveWind(test_basis_index, trial_basis_index);
+          }
+          (*U)(alpha, beta) -= (test_v <= 0) ? 
+                vweights(trial_i) * trial_v * Mv * D_NegativeWind(test_basis_index, trial_basis_index) :
+                vweights(trial_i) * trial_v * Mv * D_PositiveWind(test_basis_index, trial_basis_index);
+        }
+      }
+    }
+  }
+  
 };
 
 Matrix KineticDriftD_DG_IMEX_IM_Schur_period::rho_init(const Matrix& x)

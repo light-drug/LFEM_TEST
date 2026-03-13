@@ -372,8 +372,8 @@ protected:
   const real_t& x2_;
   const int& xDiv_;
   const real_t& y1_;
-  const real_t& x2_;
-  const int& xDiv_;
+  const real_t& y2_;
+  const int& yDiv_;
 
   real_t hx_;
   real_t hy_;

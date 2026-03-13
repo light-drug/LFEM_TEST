@@ -481,6 +481,182 @@ void KineticFDmesh_period_twovel::generatevweights() {
   vweights_(1) = 1.e0 / 2.e0;
 };
   
+FDmesh2D::FDmesh2D(const real_t& x1, const real_t& x2,
+          const real_t& y1, const real_t& y2,
+          const int& xDiv, const int& yDiv)
+  : x1_(x1), x2_(x2), xDiv_(xDiv), y1_(y1), y2_(y2), yDiv_(yDiv) {};
+
+void FDmesh2D::init()
+{
+  generatehxhy();
+  generatexypoints();
+  generateCellCenter();
+};
+
+const real_t& FDmesh2D::getx1() const { return x1_; };
+const real_t& FDmesh2D::getx2() const { return x2_; };
+const int& FDmesh2D::getxDiv() const { return xDiv_; };
+const real_t& FDmesh2D::gety1() const { return y1_; };
+const real_t& FDmesh2D::gety2() const { return y2_; };
+const int& FDmesh2D::getyDiv() const { return yDiv_; };
+const real_t& FDmesh2D::gethx() const { return hx_; };
+const real_t& FDmesh2D::gethy() const { return hy_; };
+const int& FDmesh2D::getNx() const { return Nx_; };
+const int& FDmesh2D::getNy() const { return Ny_; };
+const Vector& FDmesh2D::getxpoints() const { return xpoints_; };
+const Vector& FDmesh2D::getypoints() const { return ypoints_; };
+const Vector& FDmesh2D::getX() const { return X_; };
+const Vector& FDmesh2D::getY() const { return Y_; };
+const Vector& FDmesh2D::getCellCenter_xvec() const { return CellCenter_xvec_; };
+const Vector& FDmesh2D::getCellCenter_yvec() const { return CellCenter_yvec_; };
+const std::vector<Matrix>& FDmesh2D::getCellCenter() const { return CellCenter_; };
+
+void FDmesh2D::generatehxhy()
+{
+  hx_ = (x2_ - x1_) / real_t(xDiv_);
+  hy_ = (y2_ - y1_) / real_t(yDiv_);
+};
+
+void FDmesh2D::generatexypoints()
+{
+  Nx_ = xDiv_ - 1;
+  Ny_ = yDiv_ - 1;
+
+  xpoints_.resize(xDiv_ + 1);
+  ypoints_.resize(yDiv_ + 1);
+  for (int i = 0; i <= xDiv_; ++i) {
+    xpoints_(i) = real_t(i) * hx_ + x1_;
+  }
+  for (int j = 0; j <= yDiv_; ++j) {
+    ypoints_(j) = real_t(j) * hy_ + y1_;
+  }
+
+  X_.resize(Nx_);
+  Y_.resize(Ny_);
+  for (int i = 0; i < Nx_; ++i) {
+    X_(i) = (real_t(i) + 1.e0) * hx_ + x1_;
+  }
+  for (int j = 0; j < Ny_; ++j) {
+    Y_(j) = (real_t(j) + 1.e0) * hy_ + y1_;
+  }
+};
+
+void FDmesh2D::generateCellCenter()
+{
+  Matrix cell_center_x(xDiv_, yDiv_);
+  Matrix cell_center_y(xDiv_, yDiv_);
+  for (int i = 0; i < xDiv_; ++i) {
+    for (int j = 0; j < yDiv_; ++j) {
+      cell_center_x(i, j) = (real_t(i) + 0.5e0) * hx_ + x1_;
+      cell_center_y(i, j) = (real_t(j) + 0.5e0) * hy_ + y1_;
+    }
+  }
+  CellCenter_.resize(2);
+  CellCenter_[0] = cell_center_x;
+  CellCenter_[1] = cell_center_y;
+
+  CellCenter_xvec_.resize(xDiv_);
+  CellCenter_yvec_.resize(yDiv_);
+  for (int i = 0; i < xDiv_; ++i) {
+    CellCenter_xvec_(i) = (real_t(i) + 0.5e0) * hx_ + x1_;
+  }
+  for (int j = 0; j < yDiv_; ++j) {
+    CellCenter_yvec_(j) = (real_t(j) + 0.5e0) * hy_ + y1_;
+  }
+};
+
+void FDmesh2D::DisplayResult_withXY(const std::vector<Matrix>& Coordinate,
+                    const Matrix& numerical, const Matrix& exact,
+                    const std::string& title, std::ostream& Outfile) const
+{
+  QUEST_VERIFY(Coordinate.size() == 2, " Coordinate should include x and y matrices !");
+  QUEST_VERIFY(Coordinate[0].rows() == numerical.rows() && Coordinate[0].cols() == numerical.cols(),
+              " Coordinate x and numerical must have the same mesh size !");
+  QUEST_VERIFY(Coordinate[1].rows() == numerical.rows() && Coordinate[1].cols() == numerical.cols(),
+              " Coordinate y and numerical must have the same mesh size !");
+  QUEST_VERIFY(numerical.rows() == exact.rows() && numerical.cols() == exact.cols(),
+              " numerical and exact must have the same mesh size !");
+
+  Outfile <<  "TITLE = \" "<< title << " \" " << std::endl;
+  Outfile <<  "VARIABLES = \"X\", \"Y\", \"Numerical Solution\", \"Exact Solution\"" << std::endl;
+  Outfile <<  "ZONE T = \"Solution Zone\", I = " << numerical.rows()
+          << ", J = " << numerical.cols() << " F = POINT" << std::endl;
+  Outfile << std::fixed << std::setprecision(16);
+  for (int i = 0; i < numerical.rows(); ++i) {
+    for (int j = 0; j < numerical.cols(); ++j) {
+      Outfile << Coordinate[0](i, j) << " "
+              << Coordinate[1](i, j) << " "
+              << numerical(i, j) << " "
+              << exact(i, j) << " " << std::endl;
+    }
+  }
+};
+
+void FDmesh2D::DisplayResult(const Matrix& numerical, const Matrix& exact,
+                    const std::string& title, std::ostream& Outfile) const
+{
+  QUEST_VERIFY(numerical.rows() == Nx_ && numerical.cols() == Ny_,
+              " numerical mesh size must be Nx x Ny !");
+  QUEST_VERIFY(exact.rows() == Nx_ && exact.cols() == Ny_,
+              " exact mesh size must be Nx x Ny !");
+
+  Outfile <<  "TITLE = \" "<< title << " \" " << std::endl;
+  Outfile <<  "VARIABLES = \"X\", \"Y\", \"Numerical Solution\", \"Exact Solution\"" << std::endl;
+  Outfile <<  "ZONE T = \"Solution Zone\", I = " << Nx_ << ", J = " << Ny_ << " F = POINT" << std::endl;
+  Outfile << std::fixed << std::setprecision(16);
+  for (int i = 0; i < Nx_; ++i) {
+    for (int j = 0; j < Ny_; ++j) {
+      Outfile << X_(i) << " "
+              << Y_(j) << " "
+              << numerical(i, j) << " "
+              << exact(i, j) << " " << std::endl;
+    }
+  }
+};
+
+void FDmesh2D::DisplayResult_ex(const Matrix& numerical,
+                    const std::string& title, std::ostream& Outfile) const
+{
+  QUEST_VERIFY(numerical.rows() == xDiv_ + 1 && numerical.cols() == yDiv_ + 1,
+              " numerical mesh size must be (xDiv + 1) x (yDiv + 1) !");
+
+  Outfile <<  "TITLE = \" "<< title << " \" " << std::endl;
+  Outfile <<  "VARIABLES = \"X\", \"Y\", \"Numerical Solution\"" << std::endl;
+  Outfile <<  "ZONE T = \"Solution Zone\", I = " << xDiv_ + 1
+          << ", J = " << yDiv_ + 1 << " F = POINT" << std::endl;
+  Outfile << std::fixed << std::setprecision(16);
+  for (int i = 0; i <= xDiv_; ++i) {
+    for (int j = 0; j <= yDiv_; ++j) {
+      Outfile << xpoints_(i) << " "
+              << ypoints_(j) << " "
+              << numerical(i, j) << " " << std::endl;
+    }
+  }
+};
+
+void FDmesh2D::computerrorL1(const Matrix& numerical, const Matrix& exact,
+                          real_t* error)
+{
+  Matrix err = numerical - exact;
+  err = err.cwiseAbs();
+  *error = err.sum() * hx_ * hy_;
+};
+
+void FDmesh2D::computerrorL2(const Matrix& numerical, const Matrix& exact,
+                          real_t* error)
+{
+  Matrix err = numerical - exact;
+  err = err.cwiseAbs2();
+  *error = std::sqrt(err.sum() * hx_ * hy_);
+};
+
+void FDmesh2D::computerrorLinf(const Matrix& numerical, const Matrix& exact,
+                          real_t* error)
+{
+  Matrix err = numerical - exact;
+  err = err.cwiseAbs();
+  *error = err.maxCoeff();
+};
 
 
 };
