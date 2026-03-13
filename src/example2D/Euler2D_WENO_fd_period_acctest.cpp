@@ -36,9 +36,8 @@ int main(int argc, char* argv[])
     xDiv_vec(lv) = std::pow(2, lv) * xDiv;
     yDiv_vec(lv) = std::pow(2, lv) * yDiv;
 
-    QUEST::TensorMesh2D mesh2D(x1, x2, y1, y2, xDiv_vec(lv), yDiv_vec(lv));
+    QUEST::FDmesh2D mesh2D(x1, x2, y1, y2, xDiv_vec(lv), yDiv_vec(lv));
     mesh2D.init();
-    mesh2D.generateextNeighbors_period(QUEST::BoundaryType::PeriodBoundary);
 
     QUEST::EX_TVDRK rk_table(t_order);
     rk_table.init();
@@ -51,27 +50,18 @@ int main(int argc, char* argv[])
     real_t Trun = 0.e0, dt = 0.e0;
     while (Trun < Tstop) {
       solver.setdt(&dt);
-      if (Trun + dt > Tstop) dt = Tstop - Trun;
+      if (Trun + dt > Tstop) {
+        dt = Tstop - Trun;
+      }
       solver.updateAll(Trun, dt);
       Trun += dt;
     }
 
-    const Matrix& cc = mesh2D.getCellCenter();
-    Matrix xmat(yDiv_vec(lv), xDiv_vec(lv));
-    Matrix ymat(yDiv_vec(lv), xDiv_vec(lv));
-    for (int j = 0; j < yDiv_vec(lv); ++j) {
-      for (int i = 0; i < xDiv_vec(lv); ++i) {
-        const int id = mesh2D.CellIndex(i, j);
-        xmat(j, i) = cc(0, id);
-        ymat(j, i) = cc(1, id);
-      }
-    }
-    Matrix rho_ex = solver.rho_real(xmat, ymat, Tstop);
-    Matrix err = (solver.getrho() - rho_ex).cwiseAbs();
-    const real_t area = mesh2D.gethx() * mesh2D.gethy();
-    rhoL1(lv) = err.sum() * area;
-    rhoL2(lv) = std::sqrt((err.array().square().sum()) * area);
-    rhoLinf(lv) = err.maxCoeff();
+    const std::vector<Matrix>& cc = mesh2D.getCellCenter();
+    Matrix rho_ex = solver.rho_real(cc[0], cc[1], Tstop);
+    mesh2D.computerrorL1(solver.getrho(), rho_ex, &rhoL1(lv));
+    mesh2D.computerrorL2(solver.getrho(), rho_ex, &rhoL2(lv));
+    mesh2D.computerrorLinf(solver.getrho(), rho_ex, &rhoLinf(lv));
   }
 
   QUEST::DisplayAccTable2D(xDiv_vec, yDiv_vec, rhoL1, rhoL2, rhoLinf, std::cout);
