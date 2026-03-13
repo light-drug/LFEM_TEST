@@ -2887,9 +2887,8 @@ KineticLinearD_DG_IMEX_IM_Schur_period::KineticLinearD_DG_IMEX_IM_Schur_period(
                   const KineticTensorMesh1D* mesh1D,
                   const fespace1D* fe,
                   const IMEX_RK* rk_table,
-                  const PoissonSolver1D_period* poisson_solver,
                   const Solver1DType& schur_solver_type)
-  : KineticDriftD_DG_IMEX_IM_Schur_period(mesh1D, fe, rk_table, poisson_solver, schur_solver_type) {};
+  : KineticDriftD_DG_IMEX_IM_Schur_period(mesh1D, fe, rk_table, nullptr, schur_solver_type) {};
 
 void KineticLinearD_DG_IMEX_IM_Schur_period::init()
 {

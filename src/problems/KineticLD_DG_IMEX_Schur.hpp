@@ -95,6 +95,17 @@ public:
                       const real_t& dt,
                       const real_t& a,
                       model_data_* modal);
+
+  virtual void FourierMatrix(const real_t& xita, std::string& OutfilePath,
+                            cMatrix* M_fourier, 
+                            cMatrix* D_neg_fourier,
+                            cMatrix* D_plus_fourier,
+                            cMatrix* U_fourier);
+  virtual void FourierDMatrix_compute(const real_t& be, const real_t& xita, cMatrix* D);
+  virtual void FourierUMatrix_compute(const cMatrix& D_NegativeWind,
+                                      const cMatrix& D_PositiveWind,
+                                      const real_t& xita, 
+                                      cMatrix* U);
   
   void init() override;
   void setdt(real_t* dt) override;

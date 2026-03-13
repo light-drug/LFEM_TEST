@@ -1712,11 +1712,11 @@ void KineticLinearDiffusion1D_DGIMEX_Schur_withMaxwell_acctest(int& argc, char *
   int NTH = 10;
   int outputgap = 10;
   int schur_solver_type_id = 3;
-  int poi_solver_type_id = 3;
-  real_t C11 = 1.e0;
-  real_t C12 = 0.5e0;
+  // int poi_solver_type_id = 3;
+  // real_t C11 = 1.e0;
+  // real_t C12 = 0.5e0;
   real_t schur_tol = 1.e-10;
-  real_t poi_tol = 1.e-10;
+  // real_t poi_tol = 1.e-10;
   int plot = 0;
 
   
@@ -1759,22 +1759,22 @@ void KineticLinearDiffusion1D_DGIMEX_Schur_withMaxwell_acctest(int& argc, char *
                   "The number of threads by OPENMP.");
   args.AddOption(&m, "-m", "--max",
                   "Max computational mesh size.");
-  args.AddOption(&C11, "-C11", "--C11",
-                  "The penalty term in the Poisson equation.");
-  args.AddOption(&C12, "-C12", "--C12",
-                  "The alternating flux in the Poisson equation.");
+  // args.AddOption(&C11, "-C11", "--C11",
+  //                 "The penalty term in the Poisson equation.");
+  // args.AddOption(&C12, "-C12", "--C12",
+  //                 "The alternating flux in the Poisson equation.");
   args.AddOption(&outputgap, "-output", "--outputgap",
                   "The Trun output gap time steps.");
   args.AddOption(&plot, "-plot", "--if_plot",
                   "The plot bool variable.");
   args.AddOption(&schur_solver_type_id, "-schur", "--schur_solver_type",
                   "The solver type for the Schur complement system.");
-  args.AddOption(&poi_solver_type_id, "-poi", "--poi_solver_type",
-                  "The solver type for the Poisson equation.");
+  // args.AddOption(&poi_solver_type_id, "-poi", "--poi_solver_type",
+  //                 "The solver type for the Poisson equation.");
   args.AddOption(&schur_tol, "-schurtol", "--schurtol",
                   "The sparse solver tolerance.");
-  args.AddOption(&poi_tol, "-poitol", "--poitol",
-                  "The Poisson tolerance for the drift diffusion equation ");
+  // args.AddOption(&poi_tol, "-poitol", "--poitol",
+  //                 "The Poisson tolerance for the drift diffusion equation ");
   args.ParseCheck(std::cout);
 
   IntVector xDiv_vec(m), vDiv_vec(m);
@@ -1791,12 +1791,12 @@ void KineticLinearDiffusion1D_DGIMEX_Schur_withMaxwell_acctest(int& argc, char *
           static_cast<QUEST::QuadratureType>(quatype_id);
     QUEST::Solver1DType schur_solver_type = 
           static_cast<QUEST::Solver1DType>(schur_solver_type_id);
-    QUEST::PoissonSolver1DType poi_solver_type = 
-          static_cast<QUEST::PoissonSolver1DType>(poi_solver_type_id);
+    // QUEST::PoissonSolver1DType poi_solver_type = 
+    //       static_cast<QUEST::PoissonSolver1DType>(poi_solver_type_id);
     
-    PoissonSolver1DParameter pa;
-    pa.C11 = C11;
-    pa.C12 = C12;
+    // PoissonSolver1DParameter pa;
+    // pa.C11 = C11;
+    // pa.C12 = C12;
 
     QUEST::KineticTensorMesh1D mesh1D(x1, x2, v1, v2, xDiv_vec(i), vDiv_vec(i));
     mesh1D.init();
@@ -1805,13 +1805,13 @@ void KineticLinearDiffusion1D_DGIMEX_Schur_withMaxwell_acctest(int& argc, char *
     QUEST::fespace1D fe(&mesh1D, &basis, qua_order, quatype);
     fe.setNTH(NTH);
     fe.init();
-    QUEST::PoissonSolver1D_period poi_solver(&fe, pa);
-    poi_solver.init(poi_solver_type, poi_tol);
+    // QUEST::PoissonSolver1D_period poi_solver(&fe, pa);
+    // poi_solver.init(poi_solver_type, poi_tol);
     QUEST::IMEX_RK rk_table(t_order);
     rk_table.init();
     rk_table.printall();
     QUEST::KineticLinearD_DG_IMEX_IM_Schur_period kieLD(&mesh1D, &fe, &rk_table, 
-                                &poi_solver, schur_solver_type);
+                                schur_solver_type);
     kieLD.seteps(knu);
     kieLD.setgamma(gamma);
     kieLD.setCR(CR);

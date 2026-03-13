@@ -538,6 +538,120 @@ void KineticLD_DG_IMEX_IM_Schur::SolveRho_DichletBoundary(const real_t& Trun,
   modal->rho = rho;
 };
 
+void KineticLD_DG_IMEX_IM_Schur::FourierMatrix(const real_t& xita, std::string& OutfilePath,
+                                              cMatrix* M_fourier, 
+                                              cMatrix* D_neg_fourier,
+                                              cMatrix* D_plus_fourier,
+                                              cMatrix* U_fourier)
+{
+  // ********* 传入相关变量 ********** //
+  const Matrix& v_u = fe_->getv_u();
+  const Matrix& dv_u = fe_->getdv_u();
+  const int& Nv = mesh1D_->getNv();
+  const Vector& V = mesh1D_->getV();
+  const Vector& vweights = mesh1D_->getvweights();
+  const int& polydim = fe_->getbasis()->getpolydim();
+  // ******************************** //
+
+  cMatrix D_NegativeWind, D_PositiveWind;
+  FourierDMatrix_compute(0.5e0, xita, &D_PositiveWind);
+  D_PositiveWind = - D_PositiveWind;
+  FourierDMatrix_compute(- 0.5e0, xita, &D_NegativeWind);
+  D_NegativeWind = - D_NegativeWind;
+
+  *M_fourier = v_u;
+  D_plus_fourier->resize(polydim, Nv * polydim);
+  D_neg_fourier->resize(Nv * polydim, polydim);
+  for (int i = 0; i < Nv; i++)
+  {
+    D_plus_fourier->block(0, i * polydim, polydim, polydim) = vweights(i) * V(i) * D_PositiveWind;
+    D_neg_fourier->block(i * polydim, 0, polydim, polydim) = V(i) * D_NegativeWind;
+  };
+  FourierUMatrix_compute(D_NegativeWind, D_PositiveWind, xita, U_fourier);
+
+};
+
+void KineticLD_DG_IMEX_IM_Schur::FourierDMatrix_compute(const real_t& be, const real_t& xita, cMatrix* D) 
+{
+  // ********* 传入相关变量 ********** //
+  const int& polydim = fe_->getbasis()->getpolydim();
+  const Matrix& dv_u = fe_->getdv_u();
+  const std::vector<Vector>& boundary_u = fe_->getboundary_u();
+  // ******************************** //
+  D->resize(polydim, polydim);
+  
+  *D = - dv_u;
+  creal_t ini_value;
+  for (int test_basis_index = 0; test_basis_index < polydim; test_basis_index++) 
+  {
+    for (int trial_basis_index = 0; trial_basis_index < polydim; trial_basis_index++) 
+    {
+      ini_value = (0.5e0 + be) * boundary_u[0](trial_basis_index) 
+                  * boundary_u[1](test_basis_index) 
+                  * std::exp(creal_t(0.e0, -1.e0 * xita))
+                + (0.5e0 - be) * boundary_u[1](trial_basis_index) 
+                  * boundary_u[1](test_basis_index)
+                - (0.5e0 + be) * boundary_u[0](trial_basis_index) 
+                  * boundary_u[0](test_basis_index)
+                - (0.5e0 - be) * boundary_u[1](trial_basis_index) 
+                  * boundary_u[0](test_basis_index) 
+                  * std::exp(creal_t(0.e0, xita));
+      ini_value = - ini_value;
+      (*D)(test_basis_index, trial_basis_index) += ini_value;
+    };
+  };
+};
+
+void KineticLD_DG_IMEX_IM_Schur::FourierUMatrix_compute(
+                              const cMatrix& D_NegativeWind,
+                              const cMatrix& D_PositiveWind,
+                              const real_t& xita, 
+                              cMatrix* U)
+{
+  // ********* 传入相关变量 ********** //
+  const int& Nv = mesh1D_->getNv();
+  const Vector& V = mesh1D_->getV();
+  const Vector& vweights = mesh1D_->getvweights();
+  const int& polydim = fe_->getbasis()->getpolydim();
+  const DiagnalMatrix& wqua_diag = fe_->getwqua_diag();
+  const Matrix& dv_u = fe_->getdv_u();
+  const Matrix& v_u = fe_->getv_u();
+  const Vector& JacobiDet = fe_->getmesh1D()->getJacobiDet();
+  const Vector& Jx = fe_->getmesh1D()->getJx();
+  const std::vector<Vector>& boundary_u = fe_->getboundary_u();
+  const IntMatrix& Tm = fe_->getTm();
+  // ******************************** //
+  U->resize(Nv * polydim, Nv * polydim);
+  U->setZero();
+  real_t test_v, trial_v;
+  for (int test_i = 0; test_i < Nv; test_i++)
+  {
+    test_v = V(test_i);
+    for (int trial_i = 0; trial_i < Nv; trial_i++)
+    {
+      trial_v = V(trial_i);
+      
+      for (int test_basis_index = 0; test_basis_index < polydim; test_basis_index++)
+      {
+        for (int trial_basis_index = 0; trial_basis_index < polydim; trial_basis_index++)
+        {
+          int alpha = test_i * polydim + test_basis_index;
+          int beta = trial_i * polydim + trial_basis_index;
+
+          if(test_i == trial_i)
+          {
+            (*U)(alpha, beta) = (test_v <= 0) ? 
+                test_v * D_NegativeWind(test_basis_index, trial_basis_index) :
+                test_v * D_PositiveWind(test_basis_index, trial_basis_index);
+          }
+          (*U)(alpha, beta) -= (test_v <= 0) ? 
+                vweights(trial_i) * trial_v * D_NegativeWind(test_basis_index, trial_basis_index) :
+                vweights(trial_i) * trial_v * D_PositiveWind(test_basis_index, trial_basis_index);
+        }
+      }
+    }
+  }
+};
 
 void KineticLD_DG_IMEX_IM_Schur::SolveG(const real_t& Trun,
                       const real_t& dt,
