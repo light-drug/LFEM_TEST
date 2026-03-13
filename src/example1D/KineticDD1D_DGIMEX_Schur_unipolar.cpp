@@ -1,18 +1,10 @@
 #include "QUEST.hpp"
 
 /*
-  ./bin/KineticDD1D_DGIMEX_Schur_acctest \
+  ./bin/KineticDD1D_DGIMEX_Schur_unipolar \
   -m 5 -nx 20 -v1 -10 -v2 10 -nv 40 \
   -Tstop_vec "0.5e0" -basis 2 -ot 3 \
   -NTH 1 -knu 1.e-6 \
-  -schur 4 -schurtol 1.e-10 \
-  -output 1 -plot 0 \
-  -itertol 1.e-9 -gamma 0.8 -timeratio 1.0
-
-  ./bin/KineticDD1D_DGIMEX_Schur_acctest \
-  -m 5 -nx 20 -v1 -10 -v2 10 -nv 40 \
-  -Tstop_vec "0.5e0" -basis 2 -ot 3 \
-  -NTH 1 -knu 1.e0 \
   -schur 4 -schurtol 1.e-10 \
   -output 1 -plot 0 \
   -itertol 1.e-9 -gamma 0.8 -timeratio 1.0
@@ -20,8 +12,8 @@
 
 int main(int argc, char *argv[])
 {
-  std::string title = "Acctest Problem for Kinetic Drift-Diffusion-Poisson equation using DG_IMEX_Schur!";
-  std::string OutputDir = "result/DG/DD_DG_IMEX_Schur_acctest";
+  std::string title = "Unipolar for Kinetic Drift-Diffusion-Poisson equation using DG_IMEX_Schur!";
+  std::string OutputDir = "result/DG/DD_DG_IMEX_Schur_unipolar";
   std::filesystem::create_directories(OutputDir);
   real_t x1 = 0.e0;
   real_t x2 = 2.e0 * std::numbers::pi;

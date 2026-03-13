@@ -205,7 +205,7 @@ public:
   virtual real_t f_init(const real_t& x, const real_t& v);
   virtual Matrix g_init(const Matrix& x, const Matrix& v);
   virtual real_t g_init(const real_t& x, const real_t& v);
-  virtual Matrix source(const Matrix& x, const Matrix& t);
+  virtual Matrix source(const Matrix& x, const real_t& t);
   virtual real_t source(const real_t& x, const real_t& t);
   virtual Matrix fsource(const Matrix& x, const Matrix& v, const real_t& t);
   virtual real_t fsource(const real_t& x, const real_t& v, const real_t& t);
@@ -215,14 +215,10 @@ public:
   virtual real_t V_value(const real_t& x, const real_t& v);
 
   virtual real_t fin_bc(const real_t& x, const real_t& v, const real_t& t);
-  virtual real_t gL_bc(const int& j, const real_t& t,
-                      const model_data_& modal, const real_t& rho_L);
-  virtual real_t gR_bc(const int& j, const real_t& t,
-                      const model_data_& modal, const real_t& rho_R);
   virtual real_t phi_bc(const real_t& x, const real_t& t);
-  virtual real_t rho_numericalbc(const real_t& x, const real_t& t,
-                      const Matrix& rho, const std::vector<Matrix>& g);
+
   virtual Matrix Maxwell(const Matrix& v);
+  virtual Vector Maxwell(const Vector& v);
   virtual real_t Maxwell(const real_t& v);
 
   virtual void init();

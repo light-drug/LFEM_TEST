@@ -577,11 +577,7 @@ void KineticDriftD_DG_IMEX_IM_Schur::Eh_compute(const Matrix& E_modal, SparseMat
   for (int i = 0; i < ncell; i++) {
     int alpha_start = i * polydim;
     local_ME = test_ref.array().rowwise() * E_nodal.col(i).transpose().array();
-    std::cout << " test_ref = " << test_ref << std::endl;
-    std::cout << " E_nodal.col = " << E_nodal.col(i) << std::endl;
-    std::cout << " result = " << local_ME << std::endl;
     local_ME *= JacobiDet(i);
-    PAUSE();
     local_ME = local_ME * wqua_diag * test_ref_T;
     for (int trial_basis_index = 0; trial_basis_index < polydim; trial_basis_index++) 
     {
@@ -1059,7 +1055,7 @@ void KineticDriftD_DG_IMEX_IM_Schur::ch_compute(const model_data_& modal,
                                 + gj_2->coeff(q, i)) * hvinv2 * real_t(wind);
         };
       };
-      g_diff_nodal = - 1.e0 * g_diff_nodal.array() * E_nodal.array();
+      g_diff_nodal = - g_diff_nodal.array() * E_nodal.array();
       fe_->Assemble_F(g_diff_nodal, 0, &((*ch)[j]));
       (*ch)[j] *= JacobiDet1;
     };
@@ -1077,24 +1073,35 @@ void KineticDriftD_DG_IMEX_IM_Schur::ch_compute(const model_data_& modal,
         for (int q = 0; q < numqua; q++)
         {
           wind = E_nodal(q, i) >= 0 ? -1 : 1;
+          // std::cout << " E_nodal = " << E_nodal(q, i) << ", wind = " << wind << std::endl;
           switch (wind)
           {
             case -1:
               g_diff_nodal(q, i) = (flux_downwind_nodal[j+1](q, i) - 
                                     flux_downwind_nodal[j](q, i)) * hvinv;
+              // std::cout << " flux_downwind_nodal = " 
+              //           << flux_downwind_nodal[j+1](q, i) 
+              //           << " ," << flux_downwind_nodal[j](q, i)
+              //           << std::endl;
               
               break;
             case 1:
               g_diff_nodal(q, i) = (flux_upwind_nodal[j+1](q, i) - 
                                     flux_upwind_nodal[j](q, i)) * hvinv;
+              // std::cout << " flux_upwind_nodal = " 
+              //           << flux_upwind_nodal[j+1](q, i) 
+              //           << " ," << flux_upwind_nodal[j](q, i)
+              //           << std::endl;
               break;
           };
         };
+        // std::cout << " \n" << std::endl;
       }
       g_diff_nodal = - g_diff_nodal.array() * E_nodal.array();
       fe_->Assemble_F(g_diff_nodal, 0, &((*ch)[j]));
       (*ch)[j] *= JacobiDet1;
     };
+    // PAUSE();
     break;
   }
   default:

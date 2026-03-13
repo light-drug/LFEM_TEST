@@ -1907,7 +1907,7 @@ real_t KineticDD_DG2d_IMEX_IM_Schur::fsource(const real_t& x, const real_t& v, c
   return 0.e0;
 };
 
-Matrix KineticDD_DG2d_IMEX_IM_Schur::fsource(const Matrix& x, const real_t& v, const real_t& t) 
+Matrix KineticDD_DG2d_IMEX_IM_Schur::fsource(const Matrix& x, const Matrix& v, const real_t& t) 
 {
   return Matrix::Zero(x.rows(), x.cols());
 };
@@ -1917,11 +1917,11 @@ real_t KineticDD_DG2d_IMEX_IM_Schur::f_init(const real_t& x, const real_t& v)
   return Maxwell(v);
 };
 
-Matrix KineticDD_DG2d_IMEX_IM_Schur::f_init(const Matrix& x, const real_t& v) 
+Matrix KineticDD_DG2d_IMEX_IM_Schur::f_init(const Matrix& x, const Matrix& v) 
 {
   Matrix f = x;
   f.setConstant(1.e0);
-  f = f * Maxwell(v);
+  f = f.array() * Maxwell(v).array();
   return f;
 };
 
@@ -1930,163 +1930,48 @@ real_t KineticDD_DG2d_IMEX_IM_Schur::g_init(const real_t& x, const real_t& v)
   return 0.e0;
 };
 
-Matrix KineticDD_DG2d_IMEX_IM_Schur::g_init(const Matrix& x, const real_t& v) 
+Matrix KineticDD_DG2d_IMEX_IM_Schur::g_init(const Matrix& x, const Matrix& v) 
 {
   Matrix g = x;
   g.setZero();
   return g;
 };
 
-real_t KineticDD_DG2d_IMEX_IM_Schur::fL_bc(const int& j,  const real_t& t,
-      const model_data_& modal) 
+real_t KineticDD_DG2d_IMEX_IM_Schur::fin_bc(const real_t& x, 
+                                            const real_t& v, 
+                                            const real_t& t)
 {
-  // ** 传入相关变量
   const real_t& x1 = mesh1D_->getx1();
   const real_t& x2 = mesh1D_->getx2();
-  const int& Nv = mesh1D_->getNv();
-  const Vector& Vweights = mesh1D_->getvweights();
-  const Vector& V = mesh1D_->getV();
-  const std::vector<Vector>& boundary_u = fe_->getboundary_u();
-  // *** 
-  real_t f;
-  if (V(j) >= 0) {
-    f = 1.e0;
-  } else {
-    Vector temp = modal.rho.col(0) + eps_ * modal.g[j].col(0);
-    f = temp.dot(boundary_u[1]);
-  }
-  return f;
-};
 
-real_t KineticDD_DG2d_IMEX_IM_Schur::fR_bc(const int& j,  const real_t& t,
-      const model_data_& modal) 
-{
-  // ** 传入相关变量
-  const real_t& x1 = mesh1D_->getx1();
-  const real_t& x2 = mesh1D_->getx2();
-  const int& ncell = mesh1D_->getncell();
-  const int& Nv = mesh1D_->getNv();
-  const Vector& Vweights = mesh1D_->getvweights();
-  const Vector& V = mesh1D_->getV();
-  const std::vector<Vector>& boundary_u = fe_->getboundary_u();
-  // *** 
-  real_t f;
-  if (V(j) <= 0) 
+  real_t temp;
+  if (std::abs(x - x1) < 1.e-13 && v >= 0)
   {
-    f = 1.e0;
-  } else {
-    Vector temp = modal.rho.col(ncell - 1) + eps_ * modal.g[j].col(ncell - 1);
-    f = temp.dot(boundary_u[0]);
-  }
-  return f;
-};
-
-real_t KineticDD_DG2d_IMEX_IM_Schur::fL_bc(const int& j,  const real_t& t,
-      const Matrix& rho, const std::vector<Matrix>& g) 
-{
-  // ** 传入相关变量
-  const real_t& x1 = mesh1D_->getx1();
-  const real_t& x2 = mesh1D_->getx2();
-  const int& Nv = mesh1D_->getNv();
-  const Vector& Vweights = mesh1D_->getvweights();
-  const Vector& V = mesh1D_->getV();
-  const std::vector<Vector>& boundary_u = fe_->getboundary_u();
-  // *** 
-  real_t f;
-  if (V(j) >= 0) {
-    f = 1.e0;
-  } else {
-    Vector temp = rho.col(0) + eps_ * g[j].col(0);
-    f = temp.dot(boundary_u[1]);
-  }
-  return f;
-};
-
-real_t KineticDD_DG2d_IMEX_IM_Schur::fR_bc(const int& j,  const real_t& t,
-      const Matrix& rho, const std::vector<Matrix>& g) 
-{
-  // ** 传入相关变量
-  const real_t& x1 = mesh1D_->getx1();
-  const real_t& x2 = mesh1D_->getx2();
-  const int& ncell = mesh1D_->getncell();
-  const int& Nv = mesh1D_->getNv();
-  const Vector& Vweights = mesh1D_->getvweights();
-  const Vector& V = mesh1D_->getV();
-  const std::vector<Vector>& boundary_u = fe_->getboundary_u();
-  // *** 
-  real_t f;
-  if (V(j) <= 0) 
+    temp = Maxwell(v);
+  } else if (std::abs(x2) < 1.e-13 && v < 0)
   {
-    f = 1.e0;
-  } else {
-    Vector temp = rho.col(ncell - 1) + eps_ * g[j].col(ncell - 1);
-    f = temp.dot(boundary_u[0]);
-  }
-  return f;
+    temp = Maxwell(v);
+  };
+};
+
+Matrix KineticDD_DG2d_IMEX_IM_Schur::Maxwell(const Matrix& v) {
+  Matrix M = 1.e0 / std::sqrt(2.e0 * pi_ * theta_) *
+                  (- v.array() * v.array() / (2 * theta_)).exp();
+  M = M / Maxwell_sum_;
+  return M;
+};
+
+Vector KineticDD_DG2d_IMEX_IM_Schur::Maxwell(const Vector& v) {
+  Vector M = 1.e0 / std::sqrt(2.e0 * pi_ * theta_) *
+                  (- v.array() * v.array() / (2 * theta_)).exp();
+  M = M / Maxwell_sum_;
+  return M;
 };
 
 real_t KineticDD_DG2d_IMEX_IM_Schur::Maxwell(const real_t& v) {
   real_t M = 1.e0 / std::sqrt(2.e0 * pi_ * theta_) * std::exp( - v * v / ( 2 * theta_));
   M = M / Maxwell_sum_;
   return M;
-};
-
-real_t KineticDD_DG2d_IMEX_IM_Schur::fL_explicit_bc(const int& j, const real_t& t)
-{
-  // ** 传入相关变量
-  const Vector& V = mesh1D_->getV();
-  // *** 
-  real_t f;
-  if (V(j) >= 0) {
-    f = 1.e0;
-  } else {
-    QUEST_ERROR(" The velocity should be inflow (v >= 0) in fL_explicit_bc ! ");
-  }
-  return f;
-};
-
-real_t KineticDD_DG2d_IMEX_IM_Schur::fR_explicit_bc(const int& j, const real_t& t)
-{
-  // ** 传入相关变量
-  const Vector& V = mesh1D_->getV();
-  // *** 
-  real_t f;
-  if (V(j) <= 0) {
-    f = 1.e0;
-  } else {
-    QUEST_ERROR(" The velocity should be inflow (v <= 0) in fR_explicit_bc ! ");
-  }
-  return f;
-};
-
-real_t KineticDD_DG2d_IMEX_IM_Schur::gL_bc(const int& j,  const real_t& t,
-      const model_data_& modal, const real_t& rho_L) 
-{
-  // ** 传入相关变量
-  const real_t& x1 = mesh1D_->getx1();
-  const real_t& x2 = mesh1D_->getx2();
-  const int& Nv = mesh1D_->getNv();
-  const Vector& Vweights = mesh1D_->getvweights();
-  const Vector& V = mesh1D_->getV();
-  // *** 
-  real_t g;
-  g = (fL_bc(j, t, modal) - rho_L) / eps_;
-  return g;
-};
-
-real_t KineticDD_DG2d_IMEX_IM_Schur::gR_bc(const int& j,  const real_t& t,
-      const model_data_& modal, const real_t& rho_R) 
-{
-  // ** 传入相关变量
-  const real_t& x1 = mesh1D_->getx1();
-  const real_t& x2 = mesh1D_->getx2();
-  const int& Nv = mesh1D_->getNv();
-  const Vector& Vweights = mesh1D_->getvweights();
-  const Vector& V = mesh1D_->getV();
-  // *** 
-  real_t g;
-  g = (fR_bc(j, t, modal) - rho_R) / eps_;
-  return g;
 };
 
 real_t KineticDD_DG2d_IMEX_IM_Schur::phi_bc(const real_t& x, const real_t& t)
@@ -2104,31 +1989,6 @@ real_t KineticDD_DG2d_IMEX_IM_Schur::phi_bc(const real_t& x, const real_t& t)
     QUEST_ERROR(" This is not the boundary x value ! ");
   }
   return phi;
-};
-
-real_t KineticDD_DG2d_IMEX_IM_Schur::rho_numericalbc(
-      const real_t& x, const real_t& t,
-      const Matrix& rho, const std::vector<Matrix>& g) 
-{
-  // ** 传入相关变量
-  const real_t& x1 = mesh1D_->getx1();
-  const real_t& x2 = mesh1D_->getx2();
-  const int& Nv = mesh1D_->getNv();
-  const Vector& Vweights = mesh1D_->getvweights();
-  // *** 
-  real_t rhobc = 0.e0;
-  if (std::abs(x - x1) < 1.e-11) {
-    for (int j = 0; j < Nv; j++) {
-      rhobc += Vweights(j) * fL_bc(j, t, rho, g);
-    }
-  } else if (std::abs(x - x2) < 1.e-11) {
-    for (int j = 0; j < Nv; j++) {
-      rhobc += Vweights(j) * fR_bc(j, t, rho, g);
-    }
-  } else {
-    QUEST_ERROR(" This is not the boundary x value ! ");
-  }
-  return rhobc;
 };
 
 
