@@ -33,24 +33,19 @@ void Euler2D_WENO_FD::init()
   const int Ny = mesh2D_->getyDiv();
   const Vector& xc = mesh2D_->getCellCenter_xvec();
   const Vector& yc = mesh2D_->getCellCenter_yvec();
+  const std::vector<Matrix>& CellCenter = mesh2D_->getCellCenter();
 
   u_.assign(num_equations_, Matrix::Zero(Nx, Ny));
 
-  for (int i = 0; i < Nx; ++i) {
-    for (int j = 0; j < Ny; ++j) {
-      const real_t x = xc(i);
-      const real_t y = yc(j);
-      const real_t rho = rho_init(x, y);
-      const real_t vx = vx_init(x, y);
-      const real_t vy = vy_init(x, y);
-      const real_t pre = pre_init(x, y);
+  Matrix vx = vx_init(CellCenter[0], CellCenter[1]);
+  Matrix vy = vy_init(CellCenter[0], CellCenter[1]);
+  Matrix pre = pre_init(CellCenter[0], CellCenter[1]);
 
-      u_[0](i, j) = rho;
-      u_[1](i, j) = rho * vx;
-      u_[2](i, j) = rho * vy;
-      u_[3](i, j) = pre / (gamma_ - 1.e0) + 0.5e0 * rho * (vx * vx + vy * vy);
-    }
-  }
+  u_[0] = rho_init(CellCenter[0], CellCenter[1]);
+  u_[1] = u_[0].array() * vx.array();
+  u_[2] = u_[0].array() * vy.array();
+  u_[3] = pre.array() / (gamma_ - 1.e0) + 
+          0.5e0 * u_[0].array() * (vx.array() * vx.array() + vy.array() * vy.array());
 
   const int stages = rk_table_->getstages();
   u_stages_.assign(stages, std::vector<Matrix>(num_equations_, Matrix::Zero(Nx, Ny)));
@@ -161,20 +156,17 @@ Vector Euler2D_WENO_FD::get_state(const std::vector<Matrix>& u,
   const real_t hx = mesh2D_->gethx();
   const real_t hy = mesh2D_->gethy();
 
-  int ii = i;
-  int jj = j;
-  if (periodic) {
-    ii = (ii % Nx + Nx) % Nx;
-    jj = (jj % Ny + Ny) % Ny;
-  }
-
+  int ii;
+  int jj;
   Vector U(4);
-  if (ii >= 0 && ii < Nx && jj >= 0 && jj < Ny) {
+  if (periodic) {
+    ii = (i % Nx + Nx) % Nx;
+    jj = (j % Ny + Ny) % Ny;
     for (int m = 0; m < 4; ++m) {
       U(m) = u[m](ii, jj);
     }
     return U;
-  }
+  } 
 
   real_t x = mesh2D_->getx1() + (real_t(ii) + 0.5e0) * hx;
   real_t y = mesh2D_->gety1() + (real_t(jj) + 0.5e0) * hy;
@@ -206,49 +198,62 @@ void Euler2D_WENO_FD::Lu_compute(const std::vector<Matrix>& u,
   std::vector<Matrix> fluxx(num_equations_, Matrix::Zero(Nx + 1, Ny));
   std::vector<Matrix> fluxy(num_equations_, Matrix::Zero(Nx, Ny + 1));
 
+  Vector U, fu;
+  std::vector<Vector> gp(x_order_), gm(x_order_);
+  int idp, idm;
+  int iface;
   for (int i = 0; i <= Nx; ++i) {
     for (int j = 0; j < Ny; ++j) {
-      std::vector<Vector> gp(x_order_), gm(x_order_);
-      int idx = 0;
-      for (int s = i - k; s <= i + k; ++s) {
-        Vector U = get_state(u, s, j, Trun, periodic);
-        gp[idx] = 0.5e0 * (flux_x_eval(U) + alpha * U);
-        ++idx;
+      iface = i - 1;
+      idp = 0; idm = 0;
+      for (int s = iface - k; s <= iface + k + 1; ++s) 
+      {
+        U = get_state(u, s, j, Trun, periodic);
+        fu = flux_x_eval(U);
+        if (s <= iface + k && s >= iface - k)
+        {
+          gp[idp] = 0.5e0 * (fu + alpha * U);
+          idp++;  
+        };
+        if (s <= iface + k + 1 && s >= iface - k + 1)
+        {
+          gm[idm] = 0.5e0 * (fu - alpha * U);
+          idm++;
+        };
       }
-      idx = 0;
-      for (int s = i - k + 1; s <= i + k + 1; ++s) {
-        Vector U = get_state(u, s, j, Trun, periodic);
-        gm[idx] = 0.5e0 * (flux_x_eval(U) - alpha * U);
-        ++idx;
-      }
-
       Vector fhat = (x_order_ == 3) ? (weno3_left_biased(gp) + weno3_right_biased(gm))
                                     : (weno5_left_biased(gp) + weno5_right_biased(gm));
-      for (int m = 0; m < num_equations_; ++m) {
+      for (int m = 0; m < num_equations_; ++m) 
+      {
         fluxx[m](i, j) = fhat(m);
       }
     }
   }
 
+  int jface;
   for (int i = 0; i < Nx; ++i) {
     for (int j = 0; j <= Ny; ++j) {
-      std::vector<Vector> gp(x_order_), gm(x_order_);
-      int idx = 0;
-      for (int s = j - k; s <= j + k; ++s) {
-        Vector U = get_state(u, i, s, Trun, periodic);
-        gp[idx] = 0.5e0 * (flux_y_eval(U) + alpha * U);
-        ++idx;
+      jface = j - 1;
+      idp = 0; idm = 0;
+      for (int s = jface - k; s <= jface + k + 1; ++s) 
+      {
+        U = get_state(u, i, s, Trun, periodic);
+        fu = flux_y_eval(U);
+        if (s <= jface + k && s >= jface - k)
+        {
+          gp[idp] = 0.5e0 * (fu + alpha * U);
+          idp++;  
+        };
+        if (s <= jface + k + 1 && s >= jface - k + 1)
+        {
+          gm[idm] = 0.5e0 * (fu - alpha * U);
+          idm++;
+        };
       }
-      idx = 0;
-      for (int s = j - k + 1; s <= j + k + 1; ++s) {
-        Vector U = get_state(u, i, s, Trun, periodic);
-        gm[idx] = 0.5e0 * (flux_y_eval(U) - alpha * U);
-        ++idx;
-      }
-
       Vector fhat = (x_order_ == 3) ? (weno3_left_biased(gp) + weno3_right_biased(gm))
                                     : (weno5_left_biased(gp) + weno5_right_biased(gm));
-      for (int m = 0; m < num_equations_; ++m) {
+      for (int m = 0; m < num_equations_; ++m) 
+      {
         fluxy[m](i, j) = fhat(m);
       }
     }
@@ -295,6 +300,24 @@ real_t Euler2D_WENO_FD::vx_init(const real_t&, const real_t&) const { return 1.e
 real_t Euler2D_WENO_FD::vy_init(const real_t&, const real_t&) const { return 1.e0; }
 real_t Euler2D_WENO_FD::pre_init(const real_t&, const real_t&) const { return 1.e0; }
 
+Matrix Euler2D_WENO_FD::rho_init(const Matrix& x, const Matrix& y) const
+{
+  return 1.e0 + 0.2e0 * (x + y).array().sin();
+}
+
+Matrix Euler2D_WENO_FD::vx_init(const Matrix& x, const Matrix& y) const 
+{ 
+  return Matrix::Ones(x.rows(), x.cols()); 
+}
+Matrix Euler2D_WENO_FD::vy_init(const Matrix& x, const Matrix& y) const 
+{ 
+  return Matrix::Ones(x.rows(), x.cols()); 
+}
+Matrix Euler2D_WENO_FD::pre_init(const Matrix& x, const Matrix& y) const 
+{ 
+  return Matrix::Ones(x.rows(), x.cols()); 
+}
+
 real_t Euler2D_WENO_FD::rho_bc(const real_t& x, const real_t& y, const real_t& t) const
 {
   return 1.e0 + 0.2e0 * std::sin(x + y - 2.e0 * t);
@@ -305,7 +328,8 @@ real_t Euler2D_WENO_FD::pre_bc(const real_t&, const real_t&, const real_t&) cons
 
 Matrix Euler2D_WENO_FD::rho_real(const Matrix& x, const Matrix& y, const real_t& t) const
 {
-  return (1.e0 + 0.2e0 * (x.array() + y.array() - 2.e0 * t).sin()).matrix();
+  Matrix temp = 1.e0 + 0.2e0 * (x.array() + y.array() - 2.e0 * t).sin();
+  return temp;
 }
 
 Euler2D_WENO_FD_period::Euler2D_WENO_FD_period(const FDmesh2D* mesh2D,
@@ -332,47 +356,62 @@ void Euler2D_WENO_FD_period::Lu_compute(const std::vector<Matrix>& u,
   std::vector<Matrix> fluxx(num_equations_, Matrix::Zero(Nx + 1, Ny));
   std::vector<Matrix> fluxy(num_equations_, Matrix::Zero(Nx, Ny + 1));
 
+  Vector U, fu;
+  std::vector<Vector> gp(x_order_), gm(x_order_);
+  int idp, idm;
+  int iface;
   for (int i = 0; i <= Nx; ++i) {
     for (int j = 0; j < Ny; ++j) {
-      std::vector<Vector> gp(x_order_), gm(x_order_);
-      int idx = 0;
-      for (int s = i - k; s <= i + k; ++s) {
-        Vector U = get_state(u, s, j, Trun, periodic);
-        gp[idx] = 0.5e0 * (flux_x_eval(U) + alpha * U);
-        ++idx;
-      }
-      idx = 0;
-      for (int s = i - k + 1; s <= i + k + 1; ++s) {
-        Vector U = get_state(u, s, j, Trun, periodic);
-        gm[idx] = 0.5e0 * (flux_x_eval(U) - alpha * U);
-        ++idx;
+      iface = i - 1;
+      idp = 0; idm = 0;
+      for (int s = iface - k; s <= iface + k + 1; ++s) 
+      {
+        U = get_state(u, s, j, Trun, periodic);
+        fu = flux_x_eval(U);
+        if (s <= iface + k && s >= iface - k)
+        {
+          gp[idp] = 0.5e0 * (fu + alpha * U);
+          idp++;  
+        };
+        if (s <= iface + k + 1 && s >= iface - k + 1)
+        {
+          gm[idm] = 0.5e0 * (fu - alpha * U);
+          idm++;
+        };
       }
       Vector fhat = (x_order_ == 3) ? (weno3_left_biased(gp) + weno3_right_biased(gm))
                                     : (weno5_left_biased(gp) + weno5_right_biased(gm));
-      for (int m = 0; m < num_equations_; ++m) {
+      for (int m = 0; m < num_equations_; ++m) 
+      {
         fluxx[m](i, j) = fhat(m);
       }
     }
   }
 
+  int jface;
   for (int i = 0; i < Nx; ++i) {
     for (int j = 0; j <= Ny; ++j) {
-      std::vector<Vector> gp(x_order_), gm(x_order_);
-      int idx = 0;
-      for (int s = j - k; s <= j + k; ++s) {
-        Vector U = get_state(u, i, s, Trun, periodic);
-        gp[idx] = 0.5e0 * (flux_y_eval(U) + alpha * U);
-        ++idx;
-      }
-      idx = 0;
-      for (int s = j - k + 1; s <= j + k + 1; ++s) {
-        Vector U = get_state(u, i, s, Trun, periodic);
-        gm[idx] = 0.5e0 * (flux_y_eval(U) - alpha * U);
-        ++idx;
+      jface = j - 1;
+      idp = 0; idm = 0;
+      for (int s = jface - k; s <= jface + k + 1; ++s) 
+      {
+        U = get_state(u, i, s, Trun, periodic);
+        fu = flux_y_eval(U);
+        if (s <= jface + k && s >= jface - k)
+        {
+          gp[idp] = 0.5e0 * (fu + alpha * U);
+          idp++;  
+        };
+        if (s <= jface + k + 1 && s >= jface - k + 1)
+        {
+          gm[idm] = 0.5e0 * (fu - alpha * U);
+          idm++;
+        };
       }
       Vector fhat = (x_order_ == 3) ? (weno3_left_biased(gp) + weno3_right_biased(gm))
                                     : (weno5_left_biased(gp) + weno5_right_biased(gm));
-      for (int m = 0; m < num_equations_; ++m) {
+      for (int m = 0; m < num_equations_; ++m) 
+      {
         fluxy[m](i, j) = fhat(m);
       }
     }
@@ -380,7 +419,7 @@ void Euler2D_WENO_FD_period::Lu_compute(const std::vector<Matrix>& u,
 
   Lu->assign(num_equations_, Matrix::Zero(Nx, Ny));
   for (int m = 0; m < num_equations_; ++m) {
-    (*Lu)[m] = -((fluxx[m].bottomRows(Nx) - fluxx[m].topRows(Nx)) / hx
+    (*Lu)[m] = - ((fluxx[m].bottomRows(Nx) - fluxx[m].topRows(Nx)) / hx
                + (fluxy[m].rightCols(Ny) - fluxy[m].leftCols(Ny)) / hy);
   }
 }

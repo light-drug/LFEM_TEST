@@ -44,6 +44,7 @@ public:
                       const Eigen::Vector2d& normal,
                       const real_t& max_speed,
                       Vector* flux) override;
+  virtual Vector fu_dot_n(const Vector& u, const Eigen::Vector2d& normal) const;
 
   virtual void setgamma(const real_t& gamma);
 

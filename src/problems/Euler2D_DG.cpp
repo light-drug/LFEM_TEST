@@ -129,26 +129,22 @@ void Euler2D_DG_TVDRK::flux_compute(const std::vector<Matrix>& u_modal,
   std::vector<Matrix> u_nodal;
   fe_->modal_to_nodal2D(u_modal, &u_nodal);
 
-  Matrix rho = u_nodal[0];
-  Matrix rhou = u_nodal[1];
-  Matrix rhov = u_nodal[2];
-  Matrix E = u_nodal[3];
-  Matrix vx = rhou.array() / rho.array();
-  Matrix vy = rhov.array() / rho.array();
+  Matrix vx = u_nodal[1].array() / u_nodal[0].array();
+  Matrix vy = u_nodal[2].array() / u_nodal[0].array();
   Matrix pre = (gamma_ - 1.e0)
-             * (E.array() - 0.5e0 * rho.array() * (vx.array().square() + vy.array().square()));
+             * (u_nodal[3].array() - 0.5e0 * u_nodal[0].array() * (vx.array().square() + vy.array().square()));
 
   fu_nodal->resize(num_equations_);
   fv_nodal->resize(num_equations_);
-  (*fu_nodal)[0] = rhou;
-  (*fu_nodal)[1] = rhou.array() * vx.array() + pre.array();
-  (*fu_nodal)[2] = rhov.array() * vx.array();
-  (*fu_nodal)[3] = (E.array() + pre.array()) * vx.array();
+  fu_nodal->at(0) = u_nodal[1];
+  fu_nodal->at(1) = u_nodal[1].array() * vx.array() + pre.array();
+  fu_nodal->at(2) = u_nodal[2].array() * vx.array();
+  fu_nodal->at(3) = (u_nodal[3].array() + pre.array()) * vx.array();
 
-  (*fv_nodal)[0] = rhov;
-  (*fv_nodal)[1] = rhou.array() * vy.array();
-  (*fv_nodal)[2] = rhov.array() * vy.array() + pre.array();
-  (*fv_nodal)[3] = (E.array() + pre.array()) * vy.array();
+  fv_nodal->at(0) = u_nodal[2];
+  fv_nodal->at(1) = u_nodal[1].array() * vy.array();
+  fv_nodal->at(2) = u_nodal[2].array() * vy.array() + pre.array();
+  fv_nodal->at(3) = (u_nodal[3].array() + pre.array()) * vy.array();
 }
 
 void Euler2D_DG_TVDRK::Lu_compute(const std::vector<Matrix>& u_modal,
@@ -196,26 +192,29 @@ void Euler2D_DG_TVDRK::numerical_flux(const Vector& u_L, const Vector& u_R,
                                       const real_t& max_speed,
                                       Vector* flux)
 {
+  *flux = 0.5e0 * (fu_dot_n(u_L, normal) + fu_dot_n(u_R, normal)) - 0.5e0 * max_speed * (u_R - u_L);
+};
+
+Vector Euler2D_DG_TVDRK::fu_dot_n(const Vector& u, const Eigen::Vector2d& normal) const
+{
   const real_t nx = normal(0);
   const real_t ny = normal(1);
 
-  auto flux_dot_n = [&](const Vector& u) {
-    const real_t rho = u(0);
-    const real_t rhou = u(1);
-    const real_t rhov = u(2);
-    const real_t E = u(3);
-    const real_t vx = rhou / rho;
-    const real_t vy = rhov / rho;
-    const real_t pre = (gamma_ - 1.e0) * (E - 0.5e0 * rho * (vx * vx + vy * vy));
-    Vector fn(4);
-    fn(0) = rhou * nx + rhov * ny;
-    fn(1) = (rhou * vx + pre) * nx + (rhou * vy) * ny;
-    fn(2) = (rhov * vx) * nx + (rhov * vy + pre) * ny;
-    fn(3) = (E + pre) * (vx * nx + vy * ny);
-    return fn;
-  };
+  const real_t rho = u(0);
+  const real_t rhou = u(1);
+  const real_t rhov = u(2);
+  const real_t E = u(3);
+  const real_t vx = rhou / rho;
+  const real_t vy = rhov / rho;
+  const real_t pre = (gamma_ - 1.e0) * (E - 0.5e0 * rho * (vx * vx + vy * vy));
 
-  *flux = 0.5e0 * (flux_dot_n(u_L) + flux_dot_n(u_R)) - 0.5e0 * max_speed * (u_R - u_L);
+  Vector fn(4);
+  fn(0) = rhou * nx + rhov * ny;
+  fn(1) = (rhou * vx + pre) * nx + (rhou * vy) * ny;
+  fn(2) = (rhov * vx) * nx + (rhov * vy + pre) * ny;
+  fn(3) = (E + pre) * (vx * nx + vy * ny);
+
+  return fn;
 }
 
 void Euler2D_DG_TVDRK::fluxint_compute(const std::vector<Matrix>& u_modal,
@@ -223,10 +222,14 @@ void Euler2D_DG_TVDRK::fluxint_compute(const std::vector<Matrix>& u_modal,
 {
   const int intboundarynum = mesh2D_->getintboundaryNum();
   const int nq1d = fe_->getnumqua1d();
-  const auto& IntBNei = mesh2D_->getintboundaryneighbors();
-  const auto& IntBNormal = mesh2D_->getintboundarynormal();
-  const auto& IntBType = mesh2D_->getintboundarytypeindex();
-  const auto& boundary_u = fe_->getboundary_u();
+  const std::vector<Eigen::Vector2i>& IntBNei = 
+    mesh2D_->getintboundaryneighbors();
+  const std::vector<Eigen::Vector2d>& IntBNormal = 
+    mesh2D_->getintboundarynormal();
+  const std::vector<Eigen::Vector2i>& IntBType = 
+    mesh2D_->getintboundarytypeindex();
+  const std::vector<Matrix>& boundary_u = 
+    fe_->getboundary_u();
 
   const real_t max_speed = max_speed_compute(u_modal);
   flux_int->assign(num_equations_, Matrix::Zero(nq1d, intboundarynum));
@@ -237,9 +240,14 @@ void Euler2D_DG_TVDRK::fluxint_compute(const std::vector<Matrix>& u_modal,
     const int sL = IntBType[i](0);
     const int sR = IntBType[i](1);
     Eigen::Vector2d normal = IntBNormal[i];
+    std::cout << " cL = " << cL 
+              << " cR = " << cR 
+              << " sL = " << sL 
+              << " sR = " << sR 
+              << " normal = " << normal.transpose() << std::endl; 
 
     for (int q = 0; q < nq1d; ++q) {
-      Vector uL(4), uR(4), flux_face;
+      Vector uL(num_equations_), uR(num_equations_), flux_face;
       for (int k = 0; k < num_equations_; ++k) {
         uL(k) = u_modal[k].col(cL).dot(boundary_u[sL].col(q));
         uR(k) = u_modal[k].col(cR).dot(boundary_u[sR].col(q));
@@ -258,10 +266,14 @@ void Euler2D_DG_TVDRK::fluxext_compute(const std::vector<Matrix>& u_modal,
 {
   const int extboundarynum = mesh2D_->getextboundaryNum();
   const int nq1d = fe_->getnumqua1d();
-  const auto& ExtBNei = mesh2D_->getextboundaryneighbors();
-  const auto& ExtBNormal = mesh2D_->getextboundarynormal();
-  const auto& ExtBType = mesh2D_->getextboundarytypeindex();
-  const auto& boundary_u = fe_->getboundary_u();
+  const std::vector<int>& ExtBNei = 
+    mesh2D_->getextboundaryneighbors();
+  const std::vector<Eigen::Vector2d>& ExtBNormal = 
+    mesh2D_->getextboundarynormal();
+  const std::vector<int>& ExtBType = 
+    mesh2D_->getextboundarytypeindex();
+  const std::vector<Matrix>& boundary_u = 
+    fe_->getboundary_u();
 
   const real_t max_speed = max_speed_compute(u_modal);
   flux_ext->assign(num_equations_, Matrix::Zero(nq1d, extboundarynum));
@@ -326,10 +338,14 @@ void Euler2D_DG_TVDRK_period::fluxext_compute(const std::vector<Matrix>& u_modal
   QUEST_VERIFY(mesh2D_->IsPeriodBoundary(), "The mesh is not periodical !");
   const int extboundarynum = mesh2D_->getextboundaryNum();
   const int nq1d = fe_->getnumqua1d();
-  const auto& PNei = mesh2D_->getextboundaryneighbors_period();
-  const auto& PType = mesh2D_->getextboundarytypeindex_period();
-  const auto& ExtBNormal = mesh2D_->getextboundarynormal();
-  const auto& boundary_u = fe_->getboundary_u();
+  const std::vector<Eigen::Vector2i>& PNei = 
+    mesh2D_->getextboundaryneighbors_period();
+  const std::vector<Eigen::Vector2i>& PType = 
+    mesh2D_->getextboundarytypeindex_period();
+  const std::vector<Eigen::Vector2d>& ExtBNormal = 
+    mesh2D_->getextboundarynormal();
+  const std::vector<Matrix>& boundary_u = 
+    fe_->getboundary_u();
 
   const real_t max_speed = max_speed_compute(u_modal);
   flux_ext->assign(num_equations_, Matrix::Zero(nq1d, extboundarynum));
@@ -340,8 +356,14 @@ void Euler2D_DG_TVDRK_period::fluxext_compute(const std::vector<Matrix>& u_modal
     const int sIn = PType[i](0);
     const int sOut = PType[i](1);
     const Eigen::Vector2d normal = ExtBNormal[i];
+
+    std::cout << " cIn = " << cIn 
+              << " cOut = " << cOut 
+              << " sIn = " << sIn 
+              << " sOut = " << sOut 
+              << " normal = " << normal.transpose() << std::endl; 
     for (int q = 0; q < nq1d; ++q) {
-      Vector u_in(4), u_out(4), flux_face;
+      Vector u_in(num_equations_), u_out(num_equations_), flux_face;
       for (int k = 0; k < num_equations_; ++k) {
         u_in(k) = u_modal[k].col(cIn).dot(boundary_u[sIn].col(q));
         u_out(k) = u_modal[k].col(cOut).dot(boundary_u[sOut].col(q));

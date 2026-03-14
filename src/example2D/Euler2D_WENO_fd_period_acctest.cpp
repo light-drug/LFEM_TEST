@@ -3,7 +3,9 @@
 #include <cmath>
 
 /*
-  ./bin/Euler2D_WENO_fd_period_acctest -m 3 -nx 20 -ny 20 -ox 5 -ot 3 -Tstop 0.1
+  ./bin/Euler2D_WENO_fd_period_acctest \
+  -m 5 -nx 20 -ny 20 -ox 5 -ot 3\
+  -Tstop 0.1 -output 10 -cfl 0.8e0
 */
 
 int main(int argc, char* argv[])
@@ -14,8 +16,9 @@ int main(int argc, char* argv[])
   int x_order = 5;
   int t_order = 3;
   real_t gamma = 1.4e0;
-  real_t cfl = 0.4e0;
+  real_t cfl = 0.8e0;
   real_t Tstop = 0.1e0;
+  int outputgap = 1;
   int m = 3;
 
   QUEST::OptionsParser args(argc, argv);
@@ -27,12 +30,14 @@ int main(int argc, char* argv[])
   args.AddOption(&cfl, "-cfl", "--cfl", "CFL.");
   args.AddOption(&Tstop, "-Tstop", "--Tstop", "Final time.");
   args.AddOption(&m, "-m", "--max", "Refinement levels.");
+  args.AddOption(&outputgap, "-output", "--outputgap", "Output every outputgap time steps if > 0.");
   args.ParseCheck(std::cout);
 
   IntVector xDiv_vec(m), yDiv_vec(m);
   Vector rhoL1(m), rhoL2(m), rhoLinf(m);
 
   for (int lv = 0; lv < m; ++lv) {
+
     xDiv_vec(lv) = std::pow(2, lv) * xDiv;
     yDiv_vec(lv) = std::pow(2, lv) * yDiv;
 
@@ -47,15 +52,30 @@ int main(int argc, char* argv[])
     solver.setCFL(cfl);
     solver.init();
 
-    real_t Trun = 0.e0, dt = 0.e0;
-    while (Trun < Tstop) {
+    TIC;
+    real_t Trun = 0.e0;
+    real_t dt = 0.e0;
+    int step_count = 0;
+    while (Trun < Tstop) 
+    {
       solver.setdt(&dt);
       if (Trun + dt > Tstop) {
         dt = Tstop - Trun;
       }
       solver.updateAll(Trun, dt);
       Trun += dt;
+      ++step_count;
+
+      if (outputgap > 0 && step_count % outputgap == 0)
+      {
+        std::cout << "Trun = " << Trun << ", dt = " << dt << std::endl;
+      }
     }
+    std::cout << " Tstop = " << Tstop 
+              << " for the mesh Nx = " << mesh2D.getxDiv() 
+              << ", Ny = " << mesh2D.getyDiv()
+              << std::endl;
+    TOC;
 
     const std::vector<Matrix>& cc = mesh2D.getCellCenter();
     Matrix rho_ex = solver.rho_real(cc[0], cc[1], Tstop);

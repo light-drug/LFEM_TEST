@@ -32,6 +32,10 @@ public:
   virtual real_t vx_init(const real_t& x, const real_t& y) const;
   virtual real_t vy_init(const real_t& x, const real_t& y) const;
   virtual real_t pre_init(const real_t& x, const real_t& y) const;
+  virtual Matrix rho_init(const Matrix& x, const Matrix& y) const;
+  virtual Matrix vx_init(const Matrix& x, const Matrix& y) const;
+  virtual Matrix vy_init(const Matrix& x, const Matrix& y) const;
+  virtual Matrix pre_init(const Matrix& x, const Matrix& y) const;
 
   virtual real_t rho_bc(const real_t& x, const real_t& y, const real_t& t) const;
   virtual real_t vx_bc(const real_t& x, const real_t& y, const real_t& t) const;
