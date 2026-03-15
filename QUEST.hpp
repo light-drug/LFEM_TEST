@@ -40,6 +40,8 @@
 #include "src/problems/APDriftDiffusion_SL.hpp"
 #include "src/problems/KineticDriftDiffusion1D_SL_lomac.hpp"
 #include "src/problems/linearadevection_WENO_fd.hpp"
+#include "src/problems/Euler2D_DG.hpp"
+#include "src/problems/Euler2D_WENO_fd.hpp"
 
 // DG problems
 #include "src/problems/hyperbolicproblemsbase.hpp"

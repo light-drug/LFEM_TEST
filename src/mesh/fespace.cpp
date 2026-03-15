@@ -647,7 +647,7 @@ void QUEST::fespace2D::Assemble_Flux(const std::vector<Matrix>& flux_int, const 
     Matrix From, To;
     for (i = 0; i < extboundaryNum; i++) 
     {
-      Cellindex = ExtBNei[0];
+      Cellindex = ExtBNei[i];
       length = ExtLength[i];
       typeindex = ExtBTypeIndex[i];
       for (j = 0; j < sys; j++) 
@@ -721,7 +721,7 @@ void QUEST::fespace2D::Assemble_Flux(const Matrix& flux_int, const Matrix& flux_
     Matrix From;
     for (i = 0; i < extboundaryNum; i++) 
     {
-      Cellindex = ExtBNei[0];
+      Cellindex = ExtBNei[i];
       length = ExtLength[i];
       typeindex = ExtBTypeIndex[i];
 
@@ -817,7 +817,7 @@ void QUEST::fespace2D::Assemble_Flux_bc(const Matrix& flux_ext, Matrix* RHS) con
     Matrix From;
     for (i = 0; i < extboundaryNum; i++) 
     {
-      Cellindex = ExtBNei[0];
+      Cellindex = ExtBNei[i];
       length = ExtLength[i];
       typeindex = ExtBTypeIndex[i];
 
