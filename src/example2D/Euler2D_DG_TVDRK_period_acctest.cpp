@@ -55,7 +55,7 @@ int main(int argc, char* argv[])
     mesh2D.init();
     mesh2D.generateextNeighbors_period(QUEST::BoundaryType::PeriodBoundary);
 
-    QUEST::BasisFunction2D basis(static_cast<QUEST::BasisType>(basis_id));
+    QUEST::BasisFunction2D basis(basistype);
     QUEST::fespace2D fe(&mesh2D, &basis, qua_order, quatype, num_equations);
     fe.init();
 
@@ -76,7 +76,7 @@ int main(int argc, char* argv[])
       if (Trun + dt > Tstop) 
       {
         dt = Tstop - Trun;
-      }
+      };
       solver.updateAll(Trun, dt);
       Trun += dt;
       ++step_count;
@@ -84,8 +84,12 @@ int main(int argc, char* argv[])
       if (outputgap > 0 && step_count % outputgap == 0)
       {
         std::cout << "Trun = " << Trun << ", dt = " << dt << std::endl;
-      }
-    }
+      };
+    };
+    std::cout << " Tstop = " << Tstop 
+              << " for the mesh Nx = " << mesh2D.getxDiv() 
+              << ", Ny = " << mesh2D.getyDiv()
+              << std::endl;
 
     std::vector<Matrix> u_nodal;
     fe.modal_to_nodal2D(solver.getumodal(), &u_nodal);
