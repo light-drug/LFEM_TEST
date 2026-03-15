@@ -7,6 +7,9 @@
 namespace QUEST
 {
 
+constexpr real_t kMinRho = 1.e-12;
+constexpr real_t kMinPre = 1.e-12;
+
 Euler2D_DG_TVDRK::Euler2D_DG_TVDRK(const TensorMesh2D* mesh2D,
                                    const fespace2D* fe,
                                    const EX_TVDRK* rk_table)
@@ -104,19 +107,25 @@ void Euler2D_DG_TVDRK::updateAll(const real_t& Trun, const real_t& dt)
   const Vector& c = rk_table_->getc();
   const int stages = rk_table_->getstages();
 
-  for (int s = 0; s < stages; ++s) {
-    for (int k = 0; k < num_equations_; ++k) {
+  for (int s = 0; s < stages; ++s) 
+  {
+    for (int k = 0; k < num_equations_; ++k) 
+    {
       u_modal_stages_[s][k].setZero();
-      for (int j = 0; j < s; ++j) {
-        u_modal_stages_[s][k] += A(s, j) * u_modal_stages_[j][k] + dt * Be(s, j) * Lu_stages_[j][k];
-      }
-      if (s == 0) {
+      for (int j = 0; j < s; ++j) 
+      {
+        u_modal_stages_[s][k] += A(s, j) * u_modal_stages_[j][k] 
+                              + dt * Be(s, j) * Lu_stages_[j][k];
+      };
+      if (s == 0) 
+      {
         u_modal_stages_[s][k] = u_modal_[k];
-      }
-    }
-    if (s == stages - 1) {
+      };
+    };
+    if (s == stages - 1) 
+    {
       break;
-    }
+    };
     Lu_compute(u_modal_stages_[s], Trun + c(s) * dt, dt, &Lu_stages_[s]);
   }
   u_modal_ = u_modal_stages_[stages - 1];
@@ -128,11 +137,16 @@ void Euler2D_DG_TVDRK::flux_compute(const std::vector<Matrix>& u_modal,
 {
   std::vector<Matrix> u_nodal;
   fe_->modal_to_nodal2D(u_modal, &u_nodal);
-
+  
   Matrix vx = u_nodal[1].array() / u_nodal[0].array();
   Matrix vy = u_nodal[2].array() / u_nodal[0].array();
   Matrix pre = (gamma_ - 1.e0)
              * (u_nodal[3].array() - 0.5e0 * u_nodal[0].array() * (vx.array().square() + vy.array().square()));
+  // std::cout << "u_nodal[0] = \n" << u_nodal[0] << std::endl;
+  // PAUSE();
+  QUEST_VERIFY((u_nodal[0].array() > kMinRho).all(), "Non-positive density detected.");
+  QUEST_VERIFY((pre.array() > kMinPre).all(), "Non-positive density detected.");
+
 
   fu_nodal->resize(num_equations_);
   fv_nodal->resize(num_equations_);
@@ -215,7 +229,7 @@ Vector Euler2D_DG_TVDRK::fu_dot_n(const Vector& u, const Eigen::Vector2d& normal
   fn(3) = (E + pre) * (vx * nx + vy * ny);
 
   return fn;
-}
+};
 
 void Euler2D_DG_TVDRK::fluxint_compute(const std::vector<Matrix>& u_modal,
                                        std::vector<Matrix>* flux_int)
@@ -234,31 +248,35 @@ void Euler2D_DG_TVDRK::fluxint_compute(const std::vector<Matrix>& u_modal,
   const real_t max_speed = max_speed_compute(u_modal);
   flux_int->assign(num_equations_, Matrix::Zero(nq1d, intboundarynum));
 
-  for (int i = 0; i < intboundarynum; ++i) {
+  Vector uL(num_equations_), uR(num_equations_), flux_face;
+  for (int i = 0; i < intboundarynum; ++i) 
+  {
     const int cL = IntBNei[i](0);
     const int cR = IntBNei[i](1);
     const int sL = IntBType[i](0);
     const int sR = IntBType[i](1);
     Eigen::Vector2d normal = IntBNormal[i];
-    std::cout << " cL = " << cL 
-              << " cR = " << cR 
-              << " sL = " << sL 
-              << " sR = " << sR 
-              << " normal = " << normal.transpose() << std::endl; 
+    // std::cout << " cL = " << cL 
+    //           << " cR = " << cR 
+    //           << " sL = " << sL 
+    //           << " sR = " << sR 
+    //           << " normal = " << normal.transpose() << std::endl; 
 
-    for (int q = 0; q < nq1d; ++q) {
-      Vector uL(num_equations_), uR(num_equations_), flux_face;
-      for (int k = 0; k < num_equations_; ++k) {
+    for (int q = 0; q < nq1d; ++q) 
+    {
+      for (int k = 0; k < num_equations_; ++k) 
+      {
         uL(k) = u_modal[k].col(cL).dot(boundary_u[sL].col(q));
         uR(k) = u_modal[k].col(cR).dot(boundary_u[sR].col(q));
-      }
+      };
       numerical_flux(uL, uR, normal, max_speed, &flux_face);
-      for (int k = 0; k < num_equations_; ++k) {
+      for (int k = 0; k < num_equations_; ++k) 
+      {
         (*flux_int)[k](q, i) = flux_face(k);
-      }
-    }
-  }
-}
+      };
+    };
+  };
+};
 
 void Euler2D_DG_TVDRK::fluxext_compute(const std::vector<Matrix>& u_modal,
                                        const std::vector<Matrix>& Dirichlet,
@@ -278,24 +296,28 @@ void Euler2D_DG_TVDRK::fluxext_compute(const std::vector<Matrix>& u_modal,
   const real_t max_speed = max_speed_compute(u_modal);
   flux_ext->assign(num_equations_, Matrix::Zero(nq1d, extboundarynum));
 
-  for (int i = 0; i < extboundarynum; ++i) {
+  Vector u_in(num_equations_), u_bc(num_equations_), flux_face;
+  for (int i = 0; i < extboundarynum; ++i) 
+  {
     const int cell = ExtBNei[i];
     const int side = ExtBType[i];
     Eigen::Vector2d normal = ExtBNormal[i];
 
-    for (int q = 0; q < nq1d; ++q) {
-      Vector u_in(4), u_bc(4), flux_face;
-      for (int k = 0; k < num_equations_; ++k) {
+    for (int q = 0; q < nq1d; ++q) 
+    {
+      for (int k = 0; k < num_equations_; ++k) 
+      {
         u_in(k) = u_modal[k].col(cell).dot(boundary_u[side].col(q));
         u_bc(k) = Dirichlet[k](q, i);
-      }
+      };
       numerical_flux(u_in, u_bc, normal, max_speed, &flux_face);
-      for (int k = 0; k < num_equations_; ++k) {
+      for (int k = 0; k < num_equations_; ++k) 
+      {
         (*flux_ext)[k](q, i) = flux_face(k);
-      }
-    }
-  }
-}
+      };
+    };
+  };
+};
 
 void Euler2D_DG_TVDRK::setgamma(const real_t& gamma)
 {
@@ -305,9 +327,7 @@ void Euler2D_DG_TVDRK::setgamma(const real_t& gamma)
 Euler2D_DG_TVDRK_period::Euler2D_DG_TVDRK_period(const TensorMesh2D* mesh2D,
                                                  const fespace2D* fe,
                                                  const EX_TVDRK* rk_table)
-  : Euler2D_DG_TVDRK(mesh2D, fe, rk_table)
-{
-}
+  : Euler2D_DG_TVDRK(mesh2D, fe, rk_table) {};
 
 void Euler2D_DG_TVDRK_period::Lu_compute(const std::vector<Matrix>& u_modal,
                                          const real_t& Trun,
@@ -350,31 +370,35 @@ void Euler2D_DG_TVDRK_period::fluxext_compute(const std::vector<Matrix>& u_modal
   const real_t max_speed = max_speed_compute(u_modal);
   flux_ext->assign(num_equations_, Matrix::Zero(nq1d, extboundarynum));
 
-  for (int i = 0; i < extboundarynum; ++i) {
+  Vector u_in(num_equations_), u_out(num_equations_), flux_face;
+  for (int i = 0; i < extboundarynum; ++i) 
+  {
     const int cIn = PNei[i](0);
     const int cOut = PNei[i](1);
     const int sIn = PType[i](0);
     const int sOut = PType[i](1);
     const Eigen::Vector2d normal = ExtBNormal[i];
 
-    std::cout << " cIn = " << cIn 
-              << " cOut = " << cOut 
-              << " sIn = " << sIn 
-              << " sOut = " << sOut 
-              << " normal = " << normal.transpose() << std::endl; 
-    for (int q = 0; q < nq1d; ++q) {
-      Vector u_in(num_equations_), u_out(num_equations_), flux_face;
-      for (int k = 0; k < num_equations_; ++k) {
+    // std::cout << " cIn = " << cIn 
+    //           << " cOut = " << cOut 
+    //           << " sIn = " << sIn 
+    //           << " sOut = " << sOut 
+    //           << " normal = " << normal.transpose() << std::endl; 
+    for (int q = 0; q < nq1d; ++q) 
+    {
+      for (int k = 0; k < num_equations_; ++k) 
+      {
         u_in(k) = u_modal[k].col(cIn).dot(boundary_u[sIn].col(q));
         u_out(k) = u_modal[k].col(cOut).dot(boundary_u[sOut].col(q));
-      }
+      };
       numerical_flux(u_in, u_out, normal, max_speed, &flux_face);
-      for (int k = 0; k < num_equations_; ++k) {
+      for (int k = 0; k < num_equations_; ++k) 
+      {
         (*flux_ext)[k](q, i) = flux_face(k);
-      }
-    }
-  }
-}
+      };
+    };
+  };
+};
 
 real_t Euler2D_DG_TVDRK_period::rho_bc(const real_t& x, const real_t& y, const real_t& t)
 {
@@ -398,7 +422,8 @@ real_t Euler2D_DG_TVDRK_period::pre_bc(const real_t& x, const real_t& y, const r
 
 Matrix Euler2D_DG_TVDRK_period::rho_real(const Matrix& x, const Matrix& y, const real_t& t)
 {
-  return (1.e0 + 0.2e0 * (x.array() + y.array() - 2.e0 * t).sin()).matrix();
+  Matrix temp = 1.e0 + 0.2e0 * (x.array() + y.array() - 2.e0 * t).sin();
+  return temp;
 }
 
 real_t Euler2D_DG_TVDRK_period::rho_real(const real_t& x, const real_t& y, const real_t& t)
